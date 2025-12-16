@@ -1,0 +1,8 @@
+name = "cf-auth-demo"
+compatibility_date = "2025-12-15"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cf_auth_demo"
+database_id = "5cdc4ff3-adf8-4b63-a15a-9d9b8f125866"
+
