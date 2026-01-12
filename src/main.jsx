@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate, Link } from "react-router-dom";
 import Signup from "./pages/Signup.jsx";
 import Login from "./pages/Login.jsx";
 import Me from "./pages/Me.jsx";
+import TmdbTheatricalReleasesPage from "./pages/TmdbTheatricalReleases";
 
 function Layout({ children }) {
   return (
@@ -27,6 +28,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         <Route path="/login" element={<Layout><Login /></Layout>} />
         <Route path="/me" element={<Layout><Me /></Layout>} />
         <Route path="*" element={<Layout><div>Not found</div></Layout>} />
+        <Route path="/tmdb-releases" element={<TmdbTheatricalReleasesPage />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>

@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Recent Releases Profit Chart</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji"; margin: 0; padding: 0; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 1.25rem; }
+    h1 { font-size: 1.5rem; margin: 0.5rem 0 0.75rem; }
+    .card { border: 1px solid rgba(0,0,0,.1); border-radius: 12px; padding: 1rem; margin-top: 1rem; background: rgba(255,255,255,.6); backdrop-filter: blur(4px); }
+    .row { display: grid; gap: .75rem; grid-template-columns: 1fr; }
+    @media (min-width: 900px) { .row { grid-template-columns: 1fr 1fr; } }
+    label { font-weight: 600; }
+    input, select, button { font: inherit; padding: .5rem .6rem; border-radius: 8px; border: 1px solid rgba(0,0,0,.2); width: 100%; box-sizing: border-box; }
+    button { background: #0d6efd; color: white; cursor: pointer; border: none; }
+    button[disabled] { opacity: .6; cursor: not-allowed; }
+    .muted { color: #666; font-size: .9rem; }
+    .pill { font-size: .8rem; background: #eef; color: #113; padding: .25rem .5rem; border-radius: 999px; display: inline-block; margin-left: .25rem; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: .95rem; }
+    th, td { padding: .6rem .5rem; border-bottom: 1px solid rgba(0,0,0,.1); vertical-align: middle; }
+    th { text-align: left; cursor: pointer; user-select: none; position: sticky; top: 0; background: inherit; }
+    .right { text-align: right; }
+    .status { display: inline-flex; align-items: center; gap: .4rem; }
+    .dot { width: .6rem; height: .6rem; border-radius: 50%; background: #bbb; }
+    .dot.ok { background: #22c55e; }
+    .dot.warn { background: #f59e0b; }
+    .dot.err { background: #ef4444; }
+    .flex { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+    .hint { font-size: .85rem; color: #555; }
+    .small { font-size: .85rem; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Recent Theater Releases — Profit Chart</h1>
+    <div class="card">
+      <div class="row">
+        <div>
+          <label for="tmdbKey">TMDB API Key</label>
+          <input id="tmdbKey" type="password" placeholder="Paste your TMDB API key" />
+          <div class="hint">Stored locally in your browser only (localStorage).</div>
+        </div>
+        <div>
+          <label for="region">Region <span class="pill">Default: US</span></label>
+          <select id="region">
+            <!-- Common regions first, add more as needed -->
+            <option value="US" selected>US</option>
+            <option value="CA">CA</option>
+            <option value="GB">GB</option>
+            <option value="AU">AU</option>
+            <option value="DE">DE</option>
+            <option value="FR">FR</option>
+            <option value="IN">IN</option>
+            <option value="JP">JP</option>
+          </select>
+          <div class="hint">Used for “Now Playing” in theaters in the selected region.</div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:.5rem">
+        <div>
+          <label for="minBudget">Min Budget Filter (USD)</label>
+          <input id="minBudget" type="number" min="0" step="100000" placeholder="0" />
+        </div>
+        <div>
+          <label for="minRevenue">Min Revenue Filter (USD)</label>
+          <input id="minRevenue" type="number" min="0" step="100000" placeholder="0" />
+        </div>
+      </div>
+
+      <div class="flex" style="margin-top:.75rem">
+        <button id="fetchBtn">Fetch & Chart</button>
+        <button id="clearBtn" style="background:#6b7280">Clear Saved Key</button>
+        <span id="status" class="status muted"><span class="dot"></span><span class="small">Idle</span></span>
+      </div>
+      <div class="hint" style="margin-top:.5rem">
+        Revenue here comes from TMDB’s <span class="mono">/movie/{id}</span> (<em>worldwide gross as reported in TMDB</em>), not Box Office Mojo.
+        If you obtain a Box Office Mojo data source (e.g., via a Cloudflare Worker proxy), you can plug it into the marked hook below.
+      </div>
+    </div>
+
+    <div class="card">
+      <canvas id="profitChart" height="220"></canvas>
+    </div>
+
+    <div class="card">
+      <div class="flex">
+        <strong>Results</strong>
+        <span class="muted small" id="counts"></span>
+      </div>
+      <table id="resultsTable">
+        <thead>
+          <tr>
+            <th data-sort="title">Title</th>
+            <th data-sort="release_date">Release Date</th>
+            <th class="right" data-sort="budget">Budget</th>
+            <th class="right" data-sort="revenue">Revenue</th>
+            <th class="right" data-sort="profit">Profit</th>
+          </tr>
+        </thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <details>
+        <summary><strong>Optional: Plug in Box Office Mojo via Worker</strong></summary>
+        <p class="small">
+          Box Office Mojo does not provide a public API. If you create a Cloudflare Worker that returns revenue for a TMDB/IMDb ID,
+          set <span class="mono">USE_BOM_PROXY = true</span> and fill <span class="mono">BOM_PROXY_URL</span> in the script below.
+          The worker should handle CORS and any site scraping/legal considerations on your end.
+        </p>
+      </details>
+    </div>
+  </div>
+
+  <script>
+    // --------------------------
+    // Config
+    // --------------------------
+    const TMDB_BASE = 'https://api.themoviedb.org/3';
+    const USE_BOM_PROXY = false;                     // set to true if you wire a proxy
+    const BOM_PROXY_URL = 'https://your-worker.example.workers.dev/revenue?imdb='; // example
+
+    // Store and restore TMDB key
+    const keyInput = document.getElementById('tmdbKey');
+    const regionInput = document.getElementById('region');
+    const minBudgetInput = document.getElementById('minBudget');
+    const minRevenueInput = document.getElementById('minRevenue');
+    keyInput.value = localStorage.getItem('tmdb_key') || '';
+
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      localStorage.removeItem('tmdb_key');
+      keyInput.value = '';
+      toast('Cleared saved key.', 'warn');
+    });
+
+    function toast(msg, level='ok') {
+      const status = document.getElementById('status');
+      const dot = status.querySelector('.dot');
+      const text = status.querySelector('span.small');
+      dot.className = 'dot ' + (level === 'ok' ? 'ok' : level === 'warn' ? 'warn' : level === 'err' ? 'err' : '');
+      text.textContent = msg;
+    }
+
+    // Basic fetch with retries
+    async function fetchJson(url, options = {}, retries = 2) {
+      for (let i = 0; i <= retries; i++) {
+        try {
+          const res = await fetch(url, options);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return await res.json();
+        } catch (err) {
+          if (i === retries) throw err;
+          await new Promise(r => setTimeout(r, 400 * (i + 1)));
+        }
+      }
+    }
+
+    // Concurrency limiter for detail calls
+    async function mapWithConcurrency(items, concurrency, fn) {
+      const results = [];
+      let i = 0;
+      await Promise.all(Array.from({ length: concurrency }, async () => {
+        while (i < items.length) {
+          const idx = i++;
+          results[idx] = await fn(items[idx], idx);
+        }
+      }));
+      return results;
+    }
+
+    // Fetch now playing (all pages)
+    async function fetchNowPlayingAll(apiKey, region) {
+      const params = new URLSearchParams({
+        language: 'en-US',
+        region: region || 'US',
+        page: '1'
+      });
+      const first = await fetchJson(`${TMDB_BASE}/movie/now_playing?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${apiKey.startsWith('eyJ') ? apiKey : ''}` }
+      }).catch(async err => {
+        // If they passed a v3 key instead of v4 token, fall back
+        if (!apiKey.startsWith('eyJ')) {
+          const withV3 = await fetchJson(`${TMDB_BASE}/movie/now_playing?${params.toString()}&api_key=${apiKey}`);
+          return withV3;
+        }
+        throw err;
+      });
+
+      const totalPages = Math.min(first.total_pages || 1, 5); // cap to 5 pages for safety
+      let all = first.results || [];
+      for (let p = 2; p <= totalPages; p++) {
+        const url = `${TMDB_BASE}/movie/now_playing?language=en-US&region=${region || 'US'}&page=${p}`;
+        const pageData = await fetchJson(
+          apiKey.startsWith('eyJ') ? url : `${url}&api_key=${apiKey}`,
+          apiKey.startsWith('eyJ') ? { headers: { Authorization: `Bearer ${apiKey}` } } : {}
+        );
+        all = all.concat(pageData.results || []);
+      }
+      return all;
+    }
+
+    // Fetch details (budget & revenue) for a TMDB movie id
+    async function fetchMovieDetails(apiKey, id) {
+      const url = `${TMDB_BASE}/movie/${id}?language=en-US`;
+      return await fetchJson(
+        apiKey.startsWith('eyJ') ? url : `${url}&api_key=${apiKey}`,
+        apiKey.startsWith('eyJ') ? { headers: { Authorization: `Bearer ${apiKey}` } } : {}
+      );
+    }
+
+    // Optional BOM revenue proxy hook:
+    async function fetchRevenueFromBOMIfConfigured(imdbId) {
+      if (!USE_BOM_PROXY || !imdbId) return null;
+      try {
+        const data = await fetchJson(`${BOM_PROXY_URL}${encodeURIComponent(imdbId)}`);
+        // Expect your Worker to return { revenue: number }
+        if (data && typeof data.revenue === 'number') return data.revenue;
+      } catch (e) { /* ignore and fall back */ }
+      return null;
+    }
+
+    // Utilities
+    const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+    function toMoney(n) { return (typeof n === 'number' && !Number.isNaN(n)) ? fmt.format(n) : '—'; }
+
+    // Rendering
+    let chart;
+    function renderChart(rows) {
+      const ctx = document.getElementById('profitChart');
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: rows.map(r => r.title),
+          datasets: [{
+            label: 'Profit (Revenue - Budget)',
+            data: rows.map(r => r.profit)
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: true },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${toMoney(ctx.parsed.y)}`
+              }
+            }
+          },
+          scales: {
+            y: {
+              ticks: {
+                callback: (v) => toMoney(v)
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function renderTable(rows) {
+      const tbody = document.getElementById('resultsBody');
+      tbody.innerHTML = '';
+      for (const r of rows) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.title}</td>
+          <td>${r.release_date || ''}</td>
+          <td class="right">${toMoney(r.budget)}</td>
+          <td class="right">${toMoney(r.revenue)}</td>
+          <td class="right">${toMoney(r.profit)}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+      document.getElementById('counts').textContent =
+        `${rows.length} movies shown${rows._filtered ? ' (filtered)' : ''}`;
+    }
+
+    // Sorting
+    const table = document.getElementById('resultsTable');
+    let sortKey = 'profit', sortAsc = false;
+    table.querySelectorAll('th').forEach(th => {
+      th.addEventListener('click', () => {
+        const key = th.dataset.sort;
+        if (!key) return;
+        if (sortKey === key) sortAsc = !sortAsc; else { sortKey = key; sortAsc = key === 'title' || key === 'release_date'; }
+        if (window.__rows) {
+          const rows = [...window.__rows].sort((a, b) => {
+            const va = a[key], vb = b[key];
+            if (typeof va === 'number' && typeof vb === 'number') return sortAsc ? va - vb : vb - va;
+            return sortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+          });
+          renderTable(rows);
+          renderChart(rows);
+        }
+      });
+    });
+
+    // Main fetch flow
+    const fetchBtn = document.getElementById('fetchBtn');
+    fetchBtn.addEventListener('click', run);
+    async function run() {
+      const apiKey = keyInput.value.trim();
+      const region = regionInput.value.trim() || 'US';
+      const minBudget = Number(minBudgetInput.value || 0);
+      const minRevenue = Number(minRevenueInput.value || 0);
+      if (!apiKey) {
+        toast('Please enter your TMDB API key.', 'warn');
+        keyInput.focus();
+        return;
+      }
+      localStorage.setItem('tmdb_key', apiKey);
+
+      fetchBtn.disabled = true;
+      toast('Fetching now playing…');
+      try {
+        const list = await fetchNowPlayingAll(apiKey, region);
+        toast(`Found ${list.length} titles; loading budgets & revenue…`);
+
+        // Pull details with limited concurrency
+        const detailed = await mapWithConcurrency(list, 5, async (m) => {
+          try {
+            const det = await fetchMovieDetails(apiKey, m.id);
+            // Try BOM proxy (optional); otherwise TMDB revenue
+            let revenue = det.revenue || 0;
+            if (USE_BOM_PROXY && det.imdb_id) {
+              const bom = await fetchRevenueFromBOMIfConfigured(det.imdb_id);
+              if (typeof bom === 'number') revenue = bom;
+            }
+            return {
+              id: m.id,
+              title: m.title || m.name || '(Untitled)',
+              release_date: m.release_date || '',
+              budget: det.budget || 0,
+              revenue: revenue || 0,
+              profit: (revenue || 0) - (det.budget || 0)
+            };
+          } catch (e) {
+            return {
+              id: m.id,
+              title: m.title || m.name || '(Untitled)',
+              release_date: m.release_date || '',
+              budget: 0,
+              revenue: 0,
+              profit: 0
+            };
+          }
+        });
+
+        // Filter (optional) and sort by profit desc
+        let rows = detailed.filter(r => r.budget >= minBudget && r.revenue >= minRevenue);
+        rows._filtered = (rows.length !== detailed.length);
+        rows.sort((a, b) => b.profit - a.profit);
+
+        window.__rows = rows;
+        renderTable(rows);
+        renderChart(rows);
+        toast('Done', 'ok');
+      } catch (err) {
+        console.error(err);
+        toast('Error fetching data. Check your API key & network.', 'err');
+      } finally {
+        fetchBtn.disabled = false;
+      }
+    }
+
+    // Auto-run if key already saved
+    if (keyInput.value) {
+      setTimeout(() => run().catch(()=>{}), 50);
+    }
+  </script>
+</body>
+</html>
