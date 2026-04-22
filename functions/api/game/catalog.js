@@ -8,10 +8,11 @@ export async function onRequestGet({ request, env }) {
   const url = new URL(request.url);
   const statusFilter = url.searchParams.get("status"); // unreleased|released|complete|all
   const ownerFilter = url.searchParams.get("owner"); // userId|none|any
+  const minPopularity = Number(url.searchParams.get("minPopularity") || 0);
 
   const [movies, owned, latestDaily, users] = await Promise.all([
     env.DB.prepare(
-      `SELECT tmdb_id, title, release_date, budget, poster_url, status FROM movies ORDER BY release_date ASC`
+      `SELECT tmdb_id, title, release_date, budget, poster_url, status, popularity FROM movies ORDER BY release_date ASC`
     ).all(),
     env.DB.prepare(
       `SELECT tmdb_id, owner_user_id, purchase_price, is_void FROM owned_movies`
@@ -43,6 +44,7 @@ export async function onRequestGet({ request, env }) {
       budget: m.budget,
       poster_url: m.poster_url,
       status: m.status,
+      popularity: m.popularity || 0,
       owner_user_id: o?.owner_user_id || null,
       owner_username: o ? usernameById.get(o.owner_user_id) : null,
       purchase_price: o?.purchase_price ?? null,
@@ -54,6 +56,9 @@ export async function onRequestGet({ request, env }) {
 
   if (statusFilter && statusFilter !== "all") {
     rows = rows.filter((r) => r.status === statusFilter);
+  }
+  if (minPopularity > 0) {
+    rows = rows.filter((r) => (r.popularity || 0) >= minPopularity);
   }
   if (ownerFilter === "none") rows = rows.filter((r) => !r.owner_user_id);
   else if (ownerFilter === "any") rows = rows.filter((r) => r.owner_user_id);

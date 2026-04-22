@@ -71,3 +71,7 @@ export const apiAdminAddDaily = ({ tmdbId, date, domesticRevenue }) =>
     method: "POST",
     body: { tmdb_id: tmdbId, date, domestic_revenue: domesticRevenue },
   });
+export const apiAdminBackfillBudgets = (body = {}) =>
+  jsonFetch("/api/admin/movies/backfill-budgets", { method: "POST", body });
+export const apiAdminImportTsv = (tsv) =>
+  jsonFetch("/api/admin/import/tsv", { method: "POST", body: { tsv } });

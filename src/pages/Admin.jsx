@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   apiAdminUsers, apiAdminGrantPoints, apiAdminSetAdmin,
   apiAdminRefreshMovies, apiAdminRefreshDailies, apiAdminAddDaily,
+  apiAdminBackfillBudgets, apiAdminImportTsv,
   apiAuctions, apiAdminEditAuction, apiAdminDeleteAuction,
 } from "../api";
 import { useUser } from "../useUser";
@@ -15,6 +16,7 @@ export default function Admin() {
     <div>
       <h1>Admin</h1>
       <UpdatesPanel />
+      <ImportPanel />
       <UsersPanel />
       <AuctionsPanel />
       <ManualDailyPanel />
@@ -34,12 +36,15 @@ function UpdatesPanel() {
   return (
     <section style={card}>
       <h3>Scheduled jobs</h3>
-      <div style={{ display: "flex", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button disabled={!!busy} onClick={() => run("Movies refresh", apiAdminRefreshMovies)}>
           {busy === "Movies refresh" ? "Running..." : "Run Update Movies"}
         </button>
         <button disabled={!!busy} onClick={() => run("Dailies refresh", apiAdminRefreshDailies)}>
           {busy === "Dailies refresh" ? "Running..." : "Run Update Dailies"}
+        </button>
+        <button disabled={!!busy} onClick={() => run("Backfill budgets", apiAdminBackfillBudgets)}>
+          {busy === "Backfill budgets" ? "Running..." : "Backfill Budgets"}
         </button>
       </div>
       {log.length > 0 && (
@@ -50,6 +55,48 @@ function UpdatesPanel() {
             </div>
           ))}
         </div>
+      )}
+    </section>
+  );
+}
+
+function ImportPanel() {
+  const [tsv, setTsv] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+
+  async function doImport() {
+    if (!tsv.trim()) return;
+    setBusy(true);
+    const r = await apiAdminImportTsv(tsv);
+    setBusy(false);
+    setResult(r.data || { error: r.raw || "Request failed" });
+  }
+
+  return (
+    <section style={card}>
+      <h3>Import League from Spreadsheet (TSV)</h3>
+      <p style={{ fontSize: 13, color: "#666", marginTop: 0 }}>
+        Paste the full TSV export of your current game. Players not yet
+        registered are created as placeholder accounts you can reassign later.
+        Movies are matched by title against the catalog — unmatched titles are
+        listed in the response.
+      </p>
+      <textarea
+        value={tsv}
+        onChange={(e) => setTsv(e.target.value)}
+        placeholder="Paste TSV here..."
+        style={{ width: "100%", minHeight: 160, fontFamily: "monospace", fontSize: 12 }}
+      />
+      <div style={{ marginTop: 8 }}>
+        <button disabled={busy || !tsv.trim()} onClick={doImport}>
+          {busy ? "Importing..." : "Import"}
+        </button>
+      </div>
+      {result && (
+        <pre style={{ marginTop: 12, fontSize: 12, background: "#fafafa", padding: 12, borderRadius: 6, overflow: "auto" }}>
+          {JSON.stringify(result, null, 2)}
+        </pre>
       )}
     </section>
   );

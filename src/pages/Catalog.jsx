@@ -8,17 +8,18 @@ export default function Catalog() {
   const [err, setErr] = useState("");
   const [status, setStatus] = useState("all");
   const [owner, setOwner] = useState("all");
+  const [minPopularity, setMinPopularity] = useState(0);
   const [query, setQuery] = useState("");
 
   useEffect(() => {
     let cancelled = false;
-    apiGameCatalog({ status, owner }).then((r) => {
+    apiGameCatalog({ status, owner, minPopularity }).then((r) => {
       if (cancelled) return;
       if (!r.ok) setErr(r.data?.error || "Failed to load catalog");
       else setRows(r.data.movies);
     });
     return () => { cancelled = true; };
-  }, [status, owner]);
+  }, [status, owner, minPopularity]);
 
   const filtered = useMemo(() => {
     if (!rows) return null;
@@ -48,6 +49,17 @@ export default function Catalog() {
             <option value="all">all</option>
             <option value="any">owned</option>
             <option value="none">unowned</option>
+          </select>
+        </label>
+        <label>
+          Min popularity{" "}
+          <select value={minPopularity} onChange={(e) => setMinPopularity(Number(e.target.value))}>
+            <option value="0">all</option>
+            <option value="1">1+</option>
+            <option value="5">5+</option>
+            <option value="10">10+</option>
+            <option value="25">25+</option>
+            <option value="50">50+</option>
           </select>
         </label>
         <input

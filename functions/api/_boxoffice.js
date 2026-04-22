@@ -69,11 +69,18 @@ export async function refreshDailies({ db, token }) {
   const today = new Date().toISOString().slice(0, 10);
   const now = new Date().toISOString();
 
+  // Only scrape dailies for movies we actually track (owned or currently
+  // auctioned) — BOM is a slow, fragile dependency and there's no point
+  // pulling revenue for the other ~250 titles in the catalog.
   const { results } = await db
     .prepare(
       `SELECT m.tmdb_id, m.title, m.bom_slug
          FROM movies m
          WHERE m.status = 'released'
+           AND (
+             EXISTS (SELECT 1 FROM owned_movies o WHERE o.tmdb_id = m.tmdb_id)
+             OR EXISTS (SELECT 1 FROM auctions a WHERE a.tmdb_id = m.tmdb_id AND a.status = 'open')
+           )
            AND NOT EXISTS (
              SELECT 1 FROM dailies d
                WHERE d.tmdb_id = m.tmdb_id AND d.date = ?

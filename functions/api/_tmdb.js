@@ -36,7 +36,7 @@ function inRange(d, from, to) {
   return d && d >= from && d <= to;
 }
 
-export async function discoverUsTheatrical({ token, from, to, minPopularity = 5, maxPages = 3 }) {
+export async function discoverUsTheatrical({ token, from, to, minPopularity = 0, maxPages = 15 }) {
   let page = 1;
   let totalPages = 1;
   const all = [];
@@ -46,7 +46,7 @@ export async function discoverUsTheatrical({ token, from, to, minPopularity = 5,
       with_release_type: 3,
       "primary_release_date.gte": from,
       "primary_release_date.lte": to,
-      "popularity.gte": minPopularity,
+      "popularity.gte": minPopularity || undefined,
       sort_by: "popularity.desc",
       include_adult: false,
       include_video: false,
@@ -64,7 +64,7 @@ export async function discoverUsTheatrical({ token, from, to, minPopularity = 5,
 // Non-strict mode skips per-movie release_dates calls to stay under Cloudflare's
 // subrequest limit (50 on free, 1000 on paid) — the discover endpoint is already
 // region-filtered to US + release_type=3 so primary_release_date is reliable.
-export async function fetchReleases({ token, from, to, minPopularity = 5, strictDomestic = false }) {
+export async function fetchReleases({ token, from, to, minPopularity = 0, strictDomestic = false }) {
   const all = await discoverUsTheatrical({ token, from, to, minPopularity });
   const candidates = all
     .filter((m) => (m.popularity ?? 0) >= minPopularity)
@@ -99,20 +99,22 @@ export async function getMovieDetail(id, token) {
   return tmdbFetch(`/movie/${id}`, token);
 }
 
-// Upsert a batch of movies into the D1 `movies` table. Each entry should have
-// { tmdb_id, title, release_date, budget, poster_url }.
+// Upsert a batch of movies into the D1 `movies` table. Budget is only
+// written on INSERT (or when a real budget comes through backfillBudgets) —
+// the UPDATE path leaves existing budget alone so the catalog refresh
+// doesn't zero out values populated from TSV import or TMDB detail calls.
 export async function upsertMovies(db, rows) {
   if (!rows.length) return 0;
   const now = new Date().toISOString();
   const stmts = rows.map((r) =>
     db.prepare(
-      `INSERT INTO movies (tmdb_id, title, release_date, budget, poster_url, status, tmdb_updated_at, created_at)
-       VALUES (?, ?, ?, ?, ?, COALESCE((SELECT status FROM movies WHERE tmdb_id = ?), 'unreleased'), ?, ?)
+      `INSERT INTO movies (tmdb_id, title, release_date, budget, poster_url, popularity, status, tmdb_updated_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, COALESCE((SELECT status FROM movies WHERE tmdb_id = ?), 'unreleased'), ?, ?)
        ON CONFLICT(tmdb_id) DO UPDATE SET
          title = excluded.title,
          release_date = excluded.release_date,
-         budget = excluded.budget,
          poster_url = excluded.poster_url,
+         popularity = excluded.popularity,
          tmdb_updated_at = excluded.tmdb_updated_at`
     ).bind(
       r.tmdb_id,
@@ -120,6 +122,7 @@ export async function upsertMovies(db, rows) {
       r.release_date,
       r.budget || 0,
       r.poster_url || null,
+      r.popularity || 0,
       r.tmdb_id,
       now,
       now
@@ -129,34 +132,57 @@ export async function upsertMovies(db, rows) {
   return rows.length;
 }
 
-// Full refresh flow: discover releases in a date range, fetch per-title detail
-// (for budgets), upsert into D1. Returns count upserted.
-// `limit` caps per-movie detail fetches to stay under Cloudflare's subrequest
-// limit (50 free / 1000 paid). Movies are ordered by popularity so the cap
-// favors the most relevant titles. Prior runs persist, so repeated calls with
-// a higher minPopularity or different date ranges progressively fill the catalog.
-export async function refreshMovies({ db, token, from, to, minPopularity = 5, limit = 40 }) {
+// Full refresh: discover every 2026 release (no popularity filter) and upsert
+// metadata only. Skips per-movie detail calls — budgets are backfilled
+// on-demand via backfillBudgets() for movies that actually need them (owned
+// or auctioned). This keeps subrequests to ~15 (one per discover page).
+export async function refreshMovies({ db, token, from, to, minPopularity = 0 }) {
   const releases = await fetchReleases({ token, from, to, minPopularity, strictDomestic: false });
-  releases.sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0));
-  const capped = releases.slice(0, limit);
-  const rows = [];
-  for (const m of capped) {
-    let detail = null;
+  const rows = releases.map((m) => ({
+    tmdb_id: m.id,
+    title: m.title || "",
+    release_date: m.us_theatrical_date || m.primary_release_date || m.release_date,
+    budget: 0,
+    poster_url: posterUrl(m.poster_path),
+    popularity: m.popularity || 0,
+  }));
+  await upsertMovies(db, rows);
+  return { upserted: rows.length, discovered: releases.length };
+}
+
+// Fetch TMDB detail (for budget) for up to `limit` movies that are either
+// owned or have an open auction but have budget=0. Stays under subrequest
+// limits by capping the batch size.
+export async function backfillBudgets({ db, token, limit = 40 }) {
+  const { results } = await db
+    .prepare(
+      `SELECT m.tmdb_id FROM movies m
+         WHERE (m.budget IS NULL OR m.budget = 0)
+           AND (
+             EXISTS (SELECT 1 FROM owned_movies o WHERE o.tmdb_id = m.tmdb_id)
+             OR EXISTS (SELECT 1 FROM auctions a WHERE a.tmdb_id = m.tmdb_id AND a.status = 'open')
+           )
+         LIMIT ?`
+    )
+    .bind(limit)
+    .all();
+
+  let updated = 0;
+  for (const row of results || []) {
     try {
-      detail = await getMovieDetail(m.id, token);
+      const detail = await getMovieDetail(row.tmdb_id, token);
+      if (detail?.budget) {
+        await db
+          .prepare(`UPDATE movies SET budget = ? WHERE tmdb_id = ?`)
+          .bind(detail.budget, row.tmdb_id)
+          .run();
+        updated += 1;
+      }
     } catch {
       continue;
     }
-    rows.push({
-      tmdb_id: m.id,
-      title: m.title || detail?.title || "",
-      release_date: m.us_theatrical_date || m.primary_release_date || m.release_date,
-      budget: detail?.budget || 0,
-      poster_url: posterUrl(m.poster_path || detail?.poster_path),
-    });
   }
-  await upsertMovies(db, rows);
-  return { upserted: rows.length, discovered: releases.length, capped: capped.length };
+  return { checked: results?.length || 0, updated };
 }
 
 // Roll movie status from unreleased → released (release_date <= today).
