@@ -9,9 +9,10 @@ export async function onRequestPost({ request, env }) {
   const body = await request.json().catch(() => ({}));
   const from = body.from || "2026-01-01";
   const to = body.to || "2026-12-31";
-  const minPopularity = body.minPopularity ?? 5;
+  const minPopularity = body.minPopularity ?? 10;
+  const limit = body.limit ?? 40;
 
-  const count = await refreshMovies({ db: env.DB, token: env.TMDB_TOKEN, from, to, minPopularity });
+  const result = await refreshMovies({ db: env.DB, token: env.TMDB_TOKEN, from, to, minPopularity, limit });
   await rollStatuses(env.DB);
-  return json({ ok: true, upserted: count });
+  return json({ ok: true, ...result });
 }

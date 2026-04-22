@@ -61,6 +61,9 @@ export async function discoverUsTheatrical({ token, from, to, minPopularity = 5 
 
 // Returns movies filtered to those with a US theatrical date in range (strict),
 // or a primary/US date in range (non-strict). Each result has us_theatrical_date.
+// Non-strict mode skips per-movie release_dates calls to stay under Cloudflare's
+// subrequest limit (50 on free, 1000 on paid) — the discover endpoint is already
+// region-filtered to US + release_type=3 so primary_release_date is reliable.
 export async function fetchReleases({ token, from, to, minPopularity = 5, strictDomestic = false }) {
   const all = await discoverUsTheatrical({ token, from, to, minPopularity });
   const candidates = all
@@ -69,20 +72,17 @@ export async function fetchReleases({ token, from, to, minPopularity = 5, strict
 
   const out = [];
   for (const m of candidates) {
-    let usDate = null;
-    try {
-      const rd = await tmdbFetch(`/movie/${m.id}/release_dates`, token);
-      usDate = getUsTheatricalDate(rd);
-    } catch {
-      // per-title failure — skip the US date, fall back to primary
-    }
     if (strictDomestic) {
+      let usDate = null;
+      try {
+        const rd = await tmdbFetch(`/movie/${m.id}/release_dates`, token);
+        usDate = getUsTheatricalDate(rd);
+      } catch {
+        // per-title failure — skip the US date, fall back to primary
+      }
       if (inRange(usDate, from, to)) out.push({ ...m, us_theatrical_date: usDate });
     } else {
-      const primary = m.primary_release_date || m.release_date || null;
-      if (inRange(usDate, from, to) || inRange(primary, from, to)) {
-        out.push({ ...m, us_theatrical_date: usDate });
-      }
+      out.push({ ...m, us_theatrical_date: null });
     }
   }
 
@@ -131,15 +131,20 @@ export async function upsertMovies(db, rows) {
 
 // Full refresh flow: discover releases in a date range, fetch per-title detail
 // (for budgets), upsert into D1. Returns count upserted.
-export async function refreshMovies({ db, token, from, to, minPopularity = 5 }) {
+// `limit` caps per-movie detail fetches to stay under Cloudflare's subrequest
+// limit (50 free / 1000 paid). Movies are ordered by popularity so the cap
+// favors the most relevant titles. Prior runs persist, so repeated calls with
+// a higher minPopularity or different date ranges progressively fill the catalog.
+export async function refreshMovies({ db, token, from, to, minPopularity = 5, limit = 40 }) {
   const releases = await fetchReleases({ token, from, to, minPopularity, strictDomestic: false });
+  releases.sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0));
+  const capped = releases.slice(0, limit);
   const rows = [];
-  for (const m of releases) {
+  for (const m of capped) {
     let detail = null;
     try {
       detail = await getMovieDetail(m.id, token);
     } catch {
-      // skip titles that fail detail lookup
       continue;
     }
     rows.push({
@@ -150,7 +155,8 @@ export async function refreshMovies({ db, token, from, to, minPopularity = 5 }) 
       poster_url: posterUrl(m.poster_path || detail?.poster_path),
     });
   }
-  return upsertMovies(db, rows);
+  await upsertMovies(db, rows);
+  return { upserted: rows.length, discovered: releases.length, capped: capped.length };
 }
 
 // Roll movie status from unreleased → released (release_date <= today).
