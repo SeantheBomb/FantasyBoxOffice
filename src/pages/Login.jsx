@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { apiLogin } from "../api";
 import { useNavigate, Link } from "react-router-dom";
+import { useUser } from "../useUser";
 
 export default function Login() {
   const nav = useNavigate();
+  const { refresh } = useUser();
   const [emailOrUsername, setEmailOrUsername] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
@@ -15,9 +17,9 @@ export default function Login() {
     setBusy(true);
     const r = await apiLogin({ emailOrUsername, password });
     setBusy(false);
-
     if (!r.ok) return setErr(r.data?.error || `Login failed (${r.status})`);
-    nav("/me");
+    await refresh();
+    nav("/");
   }
 
   return (
@@ -34,7 +36,6 @@ export default function Login() {
         {err && <div style={{ color: "crimson", marginBottom: 10 }}>{err}</div>}
         <button disabled={busy} type="submit">{busy ? "Signing in..." : "Sign in"}</button>
       </form>
-
       <p style={{ marginTop: 16 }}>
         Need an account? <Link to="/signup">Sign up</Link>
       </p>
