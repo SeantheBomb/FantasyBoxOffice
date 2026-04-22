@@ -44,7 +44,8 @@ export function parseDomesticFromHtml(html) {
 
 export async function scrapeDomestic(slug) {
   const html = await fetchBomPage(slug);
-  return parseDomesticFromHtml(html);
+  const revenue = parseDomesticFromHtml(html);
+  return { revenue, htmlLength: html?.length || 0, snippet: (html || "").slice(0, 400) };
 }
 
 // Refresh dailies for every released movie. Writes one row per (tmdb_id, today)
@@ -87,7 +88,7 @@ export async function refreshDailies({ db, token }) {
       continue;
     }
     try {
-      const revenue = await scrapeDomestic(slug);
+      const { revenue, htmlLength, snippet } = await scrapeDomestic(slug);
       if (revenue != null) {
         await db
           .prepare(
@@ -103,7 +104,7 @@ export async function refreshDailies({ db, token }) {
         updated += 1;
       } else {
         failed += 1;
-        failures.push({ tmdb_id: row.tmdb_id, title: row.title, slug, reason: "parse_failed" });
+        failures.push({ tmdb_id: row.tmdb_id, title: row.title, slug, reason: "parse_failed", htmlLength, snippet });
       }
     } catch (e) {
       failed += 1;
@@ -112,7 +113,7 @@ export async function refreshDailies({ db, token }) {
     // Polite pacing between fetches.
     await sleep(1000);
   }
-  return { updated, failed, checked: results?.length || 0, failures: failures.slice(0, 10) };
+  return { updated, failed, checked: results?.length || 0, failures: failures.slice(0, 3) };
 }
 
 function sleep(ms) {
