@@ -27,12 +27,22 @@ export async function fetchBomPage(slug) {
   return res.text();
 }
 
-// Parse the "Domestic" figure from a BOM title page. BOM's layout uses
-// <span class="money">$123,456,789</span> inside a performance summary
-// block labeled "Domestic". We grep the HTML for the first money span that
-// follows the word "Domestic".
+// Parse the domestic total gross from a BOM title page. BOM's performance
+// summary section has the shape:
+//   <div class="a-section a-spacing-none mojo-performance-summary-table">
+//     ...Domestic<span class="money">$123,456,789</span>...
+// The fallback path matches any money span shortly after the word "Domestic".
 export function parseDomesticFromHtml(html) {
   if (!html) return null;
+  const perfIdx = html.indexOf("mojo-performance-summary-table");
+  if (perfIdx !== -1) {
+    const slice = html.slice(perfIdx, perfIdx + 4000);
+    const m = slice.match(/Domestic[\s\S]{0,400}?\$([\d,]+)/);
+    if (m) {
+      const n = Number(m[1].replace(/,/g, ""));
+      if (Number.isFinite(n)) return n;
+    }
+  }
   const domIdx = html.indexOf("Domestic");
   if (domIdx === -1) return null;
   const slice = html.slice(domIdx, domIdx + 2000);
@@ -42,10 +52,26 @@ export function parseDomesticFromHtml(html) {
   return Number.isFinite(n) ? n : null;
 }
 
+// Debug helper: returns where "Domestic" is in the HTML and a snippet around it.
+export function diagnoseHtml(html) {
+  if (!html) return { domFound: false };
+  const domIdx = html.indexOf("Domestic");
+  const perfIdx = html.indexOf("mojo-performance-summary-table");
+  const moneyIdx = html.indexOf('class="money"');
+  return {
+    domFound: domIdx !== -1,
+    domIdx,
+    perfIdx,
+    moneyIdx,
+    domContext: domIdx !== -1 ? html.slice(Math.max(0, domIdx - 50), domIdx + 300) : null,
+    perfContext: perfIdx !== -1 ? html.slice(perfIdx, perfIdx + 600) : null,
+  };
+}
+
 export async function scrapeDomestic(slug) {
   const html = await fetchBomPage(slug);
   const revenue = parseDomesticFromHtml(html);
-  return { revenue, htmlLength: html?.length || 0, snippet: (html || "").slice(0, 400) };
+  return { revenue, htmlLength: html?.length || 0, diag: diagnoseHtml(html) };
 }
 
 // Refresh dailies for every released movie. Writes one row per (tmdb_id, today)
@@ -88,7 +114,7 @@ export async function refreshDailies({ db, token }) {
       continue;
     }
     try {
-      const { revenue, htmlLength, snippet } = await scrapeDomestic(slug);
+      const { revenue, htmlLength, diag } = await scrapeDomestic(slug);
       if (revenue != null) {
         await db
           .prepare(
@@ -104,7 +130,7 @@ export async function refreshDailies({ db, token }) {
         updated += 1;
       } else {
         failed += 1;
-        failures.push({ tmdb_id: row.tmdb_id, title: row.title, slug, reason: "parse_failed", htmlLength, snippet });
+        failures.push({ tmdb_id: row.tmdb_id, title: row.title, slug, reason: "parse_failed", htmlLength, diag });
       }
     } catch (e) {
       failed += 1;
