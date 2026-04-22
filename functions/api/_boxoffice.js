@@ -56,7 +56,7 @@ export async function refreshDailies({ db, token }) {
 
   const { results } = await db
     .prepare(
-      `SELECT m.tmdb_id, m.bom_slug
+      `SELECT m.tmdb_id, m.title, m.bom_slug
          FROM movies m
          WHERE m.status = 'released'
            AND NOT EXISTS (
@@ -69,6 +69,7 @@ export async function refreshDailies({ db, token }) {
 
   let updated = 0;
   let failed = 0;
+  const failures = [];
   for (const row of results || []) {
     let slug = row.bom_slug;
     if (!slug) {
@@ -82,6 +83,7 @@ export async function refreshDailies({ db, token }) {
     }
     if (!slug) {
       failed += 1;
+      failures.push({ tmdb_id: row.tmdb_id, title: row.title, reason: "no_slug" });
       continue;
     }
     try {
@@ -101,14 +103,16 @@ export async function refreshDailies({ db, token }) {
         updated += 1;
       } else {
         failed += 1;
+        failures.push({ tmdb_id: row.tmdb_id, title: row.title, slug, reason: "parse_failed" });
       }
-    } catch {
+    } catch (e) {
       failed += 1;
+      failures.push({ tmdb_id: row.tmdb_id, title: row.title, slug, reason: "fetch_error", error: String(e?.message || e) });
     }
     // Polite pacing between fetches.
     await sleep(1000);
   }
-  return { updated, failed, checked: results?.length || 0 };
+  return { updated, failed, checked: results?.length || 0, failures: failures.slice(0, 10) };
 }
 
 function sleep(ms) {
