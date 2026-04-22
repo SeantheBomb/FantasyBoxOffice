@@ -1,0 +1,116 @@
+// Box Office Mojo scraper. BOM has no public API, so we fetch the HTML and
+// parse the cumulative domestic gross out of the title page.
+//
+// Slug discovery: BOM title URLs look like
+//   https://www.boxofficemojo.com/title/tt1234567/
+// where tt1234567 is the IMDb ID. TMDB exposes imdb_id on /movie/{id}, so
+// discoverBomSlug() grabs it.
+
+import { tmdbFetch } from "./_tmdb";
+
+const UA =
+  "Mozilla/5.0 (compatible; FantasyBoxOfficeBot/1.0; +https://fantasyboxoffice.pages.dev)";
+
+export async function discoverBomSlug(tmdbId, token) {
+  try {
+    const detail = await tmdbFetch(`/movie/${tmdbId}`, token);
+    return detail?.imdb_id || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchBomPage(slug) {
+  const url = `https://www.boxofficemojo.com/title/${slug}/`;
+  const res = await fetch(url, { headers: { "User-Agent": UA } });
+  if (!res.ok) throw new Error(`BOM ${res.status}`);
+  return res.text();
+}
+
+// Parse the "Domestic" figure from a BOM title page. BOM's layout uses
+// <span class="money">$123,456,789</span> inside a performance summary
+// block labeled "Domestic". We grep the HTML for the first money span that
+// follows the word "Domestic".
+export function parseDomesticFromHtml(html) {
+  if (!html) return null;
+  const domIdx = html.indexOf("Domestic");
+  if (domIdx === -1) return null;
+  const slice = html.slice(domIdx, domIdx + 2000);
+  const m = slice.match(/\$([\d,]+)/);
+  if (!m) return null;
+  const n = Number(m[1].replace(/,/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
+
+export async function scrapeDomestic(slug) {
+  const html = await fetchBomPage(slug);
+  return parseDomesticFromHtml(html);
+}
+
+// Refresh dailies for every released movie. Writes one row per (tmdb_id, today)
+// with source='bom'. Skips movies already scraped today, movies missing a slug
+// (attempts discovery first), and failures (logged as no-op).
+export async function refreshDailies({ db, token }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date().toISOString();
+
+  const { results } = await db
+    .prepare(
+      `SELECT m.tmdb_id, m.bom_slug
+         FROM movies m
+         WHERE m.status = 'released'
+           AND NOT EXISTS (
+             SELECT 1 FROM dailies d
+               WHERE d.tmdb_id = m.tmdb_id AND d.date = ?
+           )`
+    )
+    .bind(today)
+    .all();
+
+  let updated = 0;
+  let failed = 0;
+  for (const row of results || []) {
+    let slug = row.bom_slug;
+    if (!slug) {
+      slug = await discoverBomSlug(row.tmdb_id, token);
+      if (slug) {
+        await db
+          .prepare(`UPDATE movies SET bom_slug = ? WHERE tmdb_id = ?`)
+          .bind(slug, row.tmdb_id)
+          .run();
+      }
+    }
+    if (!slug) {
+      failed += 1;
+      continue;
+    }
+    try {
+      const revenue = await scrapeDomestic(slug);
+      if (revenue != null) {
+        await db
+          .prepare(
+            `INSERT INTO dailies (tmdb_id, date, domestic_revenue, source, scraped_at)
+             VALUES (?, ?, ?, 'bom', ?)
+             ON CONFLICT(tmdb_id, date) DO UPDATE SET
+               domestic_revenue = excluded.domestic_revenue,
+               source = excluded.source,
+               scraped_at = excluded.scraped_at`
+          )
+          .bind(row.tmdb_id, today, revenue, now)
+          .run();
+        updated += 1;
+      } else {
+        failed += 1;
+      }
+    } catch {
+      failed += 1;
+    }
+    // Polite pacing between fetches.
+    await sleep(1000);
+  }
+  return { updated, failed, checked: results?.length || 0 };
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}

@@ -1,0 +1,14 @@
+name = "fbo-cron"
+main = "src/index.js"
+compatibility_date = "2025-12-15"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cf_auth_demo"
+database_id = "5cdc4ff3-adf8-4b63-a15a-9d9b8f125866"
+
+# Daily 09:00 UTC → movies refresh
+# Daily 14:00 UTC → dailies refresh
+# Every minute → settle expired auctions
+[triggers]
+crons = ["0 9 * * *", "0 14 * * *", "* * * * *"]

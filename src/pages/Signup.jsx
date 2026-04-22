@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { apiSignup } from "../api";
 import { useNavigate, Link } from "react-router-dom";
+import { useUser } from "../useUser";
 
 export default function Signup() {
   const nav = useNavigate();
+  const { refresh } = useUser();
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [realName, setRealName] = useState("");
@@ -19,7 +21,8 @@ export default function Signup() {
     setBusy(false);
 
     if (!r.ok) return setErr(r.data?.error || `Signup failed (${r.status})`);
-    nav("/me");
+    await refresh();
+    nav("/");
   }
 
   return (
