@@ -36,18 +36,18 @@ function inRange(d, from, to) {
   return d && d >= from && d <= to;
 }
 
-export async function discoverUsTheatrical({ token, from, to, minPopularity = 5 }) {
+export async function discoverUsTheatrical({ token, from, to, minPopularity = 5, maxPages = 3 }) {
   let page = 1;
   let totalPages = 1;
   const all = [];
-  while (page <= totalPages && page <= 500) {
+  while (page <= totalPages && page <= maxPages) {
     const data = await tmdbFetch("/discover/movie", token, {
       region: "US",
       with_release_type: 3,
       "primary_release_date.gte": from,
       "primary_release_date.lte": to,
       "popularity.gte": minPopularity,
-      sort_by: "primary_release_date.asc",
+      sort_by: "popularity.desc",
       include_adult: false,
       include_video: false,
       page,
