@@ -1,37 +1,48 @@
 import { Link, NavLink } from "react-router-dom";
 import { useUser } from "./useUser";
+import "./theater.css";
 
 const linkStyle = ({ isActive }) => ({
-  padding: "6px 10px",
-  borderRadius: 6,
+  padding: "6px 12px",
+  borderRadius: 4,
   textDecoration: "none",
-  color: isActive ? "white" : "#2a2a2a",
-  background: isActive ? "#2a2a2a" : "transparent",
-  fontWeight: isActive ? 600 : 400,
+  color: isActive ? "#1a0000" : "#f5d27a",
+  background: isActive ? "#f5d27a" : "transparent",
+  fontWeight: isActive ? 700 : 500,
+  letterSpacing: "0.03em",
+  textTransform: "uppercase",
+  fontSize: 13,
 });
 
 export default function Layout({ children }) {
   const { user, loading } = useUser();
   return (
-    <div style={{ fontFamily: "system-ui, sans-serif", minHeight: "100vh", background: "#fafafa", color: "#111" }}>
-      <header style={{ background: "white", borderBottom: "1px solid #eee", padding: "12px 24px", display: "flex", alignItems: "center", gap: 8 }}>
-        <Link to="/" style={{ fontWeight: 700, fontSize: 18, textDecoration: "none", color: "#111", marginRight: 16 }}>
-          Fantasy Box Office
+    <div className="fbo-app">
+      <header className="fbo-header">
+        <Link to="/" className="fbo-brand">
+          <span className="fbo-brand-icon" aria-hidden="true">🎬</span>
+          <span className="fbo-brand-text">
+            <span className="fbo-brand-line1">Fantasy</span>
+            <span className="fbo-brand-line2">Box Office</span>
+          </span>
         </Link>
-        {user && (
-          <>
-            <NavLink to="/standings" style={linkStyle}>Standings</NavLink>
-            <NavLink to="/catalog" style={linkStyle}>Catalog</NavLink>
-            <NavLink to="/auctions" style={linkStyle}>Auctions</NavLink>
-            <NavLink to="/my-movies" style={linkStyle}>My Movies</NavLink>
-            {user.is_admin && <NavLink to="/admin" style={linkStyle}>Admin</NavLink>}
-          </>
-        )}
-        <div style={{ marginLeft: "auto", fontSize: 14 }}>
+        <nav className="fbo-nav">
+          {user && (
+            <>
+              <NavLink to="/standings" style={linkStyle}>Standings</NavLink>
+              <NavLink to="/catalog" style={linkStyle}>Catalog</NavLink>
+              <NavLink to="/auctions" style={linkStyle}>Auctions</NavLink>
+              <NavLink to="/my-movies" style={linkStyle}>My Movies</NavLink>
+              {user.is_admin && <NavLink to="/admin" style={linkStyle}>Admin</NavLink>}
+            </>
+          )}
+        </nav>
+        <div className="fbo-usermenu">
           {loading ? null : user ? (
             <>
-              <span style={{ marginRight: 8 }}>
-                <b>{user.username}</b> · {user.points_remaining} pts
+              <span className="fbo-userbadge">
+                <b>{user.username}</b>
+                <span className="fbo-ticket">🎟 {user.points_remaining} pts</span>
               </span>
               <NavLink to="/me" style={linkStyle}>Account</NavLink>
             </>
@@ -43,7 +54,10 @@ export default function Layout({ children }) {
           )}
         </div>
       </header>
-      <main style={{ padding: 24, maxWidth: 1100, margin: "0 auto" }}>{children}</main>
+      <main className="fbo-main">{children}</main>
+      <footer className="fbo-footer">
+        <span>🎭 Fantasy Box Office · 2026 Season</span>
+      </footer>
     </div>
   );
 }

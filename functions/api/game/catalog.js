@@ -12,7 +12,10 @@ export async function onRequestGet({ request, env }) {
 
   const [movies, owned, latestDaily, users] = await Promise.all([
     env.DB.prepare(
-      `SELECT tmdb_id, title, release_date, budget, poster_url, status, popularity FROM movies ORDER BY release_date ASC`
+      `SELECT tmdb_id, title, release_date, budget, poster_url, status, popularity
+         FROM movies
+         WHERE release_date BETWEEN '2026-01-01' AND '2026-12-31'
+         ORDER BY release_date ASC`
     ).all(),
     env.DB.prepare(
       `SELECT tmdb_id, owner_user_id, purchase_price, is_void FROM owned_movies`

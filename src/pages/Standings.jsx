@@ -57,8 +57,15 @@ export default function Standings() {
                   {u.movies.map((m) => (
                     <tr key={m.tmdb_id} style={{ borderTop: "1px solid #f0f0f0", opacity: m.is_void ? 0.5 : 1 }}>
                       <td style={{ padding: "4px 0" }}>
-                        <Link to={`/movie/${m.tmdb_id}`}>{m.title}</Link>
-                        {m.is_void && <span style={{ marginLeft: 6, fontSize: 11, color: "#b00020" }}>VOID</span>}
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          {m.poster_url ? (
+                            <img src={m.poster_url} alt="" style={posterThumb} />
+                          ) : (
+                            <div style={posterThumbEmpty}>—</div>
+                          )}
+                          <Link to={`/movie/${m.tmdb_id}`}>{m.title}</Link>
+                          {m.is_void && <span style={{ marginLeft: 6, fontSize: 11, color: "#b00020" }}>VOID</span>}
+                        </div>
                       </td>
                       <td>{m.status}</td>
                       <td style={{ textAlign: "right" }}>{fullCurrency(m.revenue)}</td>
@@ -75,3 +82,24 @@ export default function Standings() {
     </div>
   );
 }
+
+const posterThumb = {
+  width: 32,
+  height: 48,
+  objectFit: "cover",
+  borderRadius: 3,
+  boxShadow: "0 1px 2px rgba(0,0,0,0.15)",
+  flexShrink: 0,
+};
+const posterThumbEmpty = {
+  width: 32,
+  height: 48,
+  borderRadius: 3,
+  background: "#f0f0f0",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: "#bbb",
+  fontSize: 18,
+  flexShrink: 0,
+};

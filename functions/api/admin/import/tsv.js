@@ -86,6 +86,13 @@ export async function onRequestPost({ request, env }) {
       ).bind(m.budget, found.tmdb_id).run();
     }
 
+    // "Out of theaters" in the TSV = completed theatrical run. Map to status='complete'.
+    if (m.outOfTheaters) {
+      await env.DB.prepare(
+        `UPDATE movies SET status = 'complete' WHERE tmdb_id = ?`
+      ).bind(found.tmdb_id).run();
+    }
+
     // Revenue → dailies row dated today, source='import'.
     if (m.revenue && m.revenue > 0) {
       const today = now.slice(0, 10);

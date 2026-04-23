@@ -3,6 +3,7 @@ import {
   apiAdminUsers, apiAdminGrantPoints, apiAdminSetAdmin,
   apiAdminRefreshMovies, apiAdminRefreshDailies, apiAdminAddDaily,
   apiAdminBackfillBudgets, apiAdminImportTsv,
+  apiAdminUpdateProfile, apiAdminResetPassword,
   apiAuctions, apiAdminEditAuction, apiAdminDeleteAuction,
 } from "../api";
 import { useUser } from "../useUser";
@@ -130,6 +131,24 @@ function UsersPanel() {
     if (!r.ok) return alert(r.data?.error);
     reload();
   }
+  async function editUser(u) {
+    const username = window.prompt("Username", u.username);
+    if (username == null) return;
+    const email = window.prompt("Email", u.email);
+    if (email == null) return;
+    const r = await apiAdminUpdateProfile(u.id, { username, email });
+    if (!r.ok) return alert(r.data?.error);
+    reload();
+  }
+  async function resetPassword(u) {
+    if (!window.confirm(`Reset password for ${u.username}? A new temporary password will be generated.`)) return;
+    const r = await apiAdminResetPassword(u.id);
+    if (!r.ok) return alert(r.data?.error);
+    window.prompt(
+      `New temporary password for ${u.username}. Share via Discord and ask them to change it in My Account.`,
+      r.data.temporary_password
+    );
+  }
 
   return (
     <section style={card}>
@@ -158,6 +177,8 @@ function UsersPanel() {
                 <td style={td}>{u.is_admin ? "yes" : "no"}</td>
                 <td style={td}>
                   <button onClick={() => grant(u.id)}>± points</button>{" "}
+                  <button onClick={() => editUser(u)}>Edit</button>{" "}
+                  <button onClick={() => resetPassword(u)}>Reset pw</button>{" "}
                   <button onClick={() => toggleAdmin(u)}>{u.is_admin ? "Revoke admin" : "Make admin"}</button>
                 </td>
               </tr>

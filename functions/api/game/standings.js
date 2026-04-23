@@ -54,7 +54,11 @@ export async function onRequestGet({ request, env }) {
     const m = movieById.get(o.tmdb_id);
     if (!m) continue;
     const revenue = revenueByTmdb.get(o.tmdb_id) || 0;
-    const profit = o.is_void ? 0 : revenue - (m.budget || 0);
+    // Budget only counts against profit once the movie is released — while a
+    // player's unreleased picks are still speculative, their standings
+    // shouldn't tank by the production budget.
+    const released = m.status === "released" || m.status === "complete";
+    const profit = o.is_void ? 0 : (released ? revenue - (m.budget || 0) : 0);
     u.total_profit += profit;
     u.movies.push({
       tmdb_id: m.tmdb_id,

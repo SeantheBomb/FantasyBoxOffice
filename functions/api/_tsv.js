@@ -138,23 +138,25 @@ export function parseTsv(text, { defaultYear = 2026 } = {}) {
     if (!title) continue;
     if (title.toLowerCase().startsWith("total")) break;
 
-    const voidFlag = ((row[titleCol - 1] || "").trim().toUpperCase() === "X");
+    // 'X' in the col before the title = "out of theaters" (informational).
+    const outOfTheaters = ((row[titleCol - 1] || "").trim().toUpperCase() === "X");
     const releaseDate = parseReleaseDate(row[releaseCol], defaultYear);
     const budget = parseMoney(row[budgetCol]);
     const revenue = parseMoney(row[revenueCol]);
+    const profitStr = (row[profitCol] || "").trim();
+    // Voided in the spreadsheet: profit cell is blank even though budget AND
+    // revenue are populated. This marks movies the owner voided out of.
+    const isVoid = !!(budget && revenue && !profitStr);
 
     const bids = [];
     for (const p of players) {
       const col = playerNameToCol[p.name];
       const cell = (row[col] || "").trim();
-      // Non-void owner: the one column with a numeric bid.
-      // Void indicator (e.g. "X") in a point column is ignored — the row's
-      // leading X captures that the movie was voided.
       const amount = parseInteger(cell);
       if (amount != null && amount > 0) bids.push({ player: p.name, amount });
     }
 
-    movies.push({ title, releaseDate, budget, revenue, isVoid: voidFlag, bids });
+    movies.push({ title, releaseDate, budget, revenue, isVoid, outOfTheaters, bids });
   }
 
   return { players, movies };

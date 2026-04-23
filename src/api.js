@@ -75,3 +75,13 @@ export const apiAdminBackfillBudgets = (body = {}) =>
   jsonFetch("/api/admin/movies/backfill-budgets", { method: "POST", body });
 export const apiAdminImportTsv = (tsv) =>
   jsonFetch("/api/admin/import/tsv", { method: "POST", body: { tsv } });
+export const apiAdminUpdateProfile = (userId, patch) =>
+  jsonFetch(`/api/admin/users/${userId}/profile`, { method: "POST", body: patch });
+export const apiAdminResetPassword = (userId) =>
+  jsonFetch(`/api/admin/users/${userId}/reset-password`, { method: "POST", body: {} });
+
+// Self-service
+export const apiUpdateMyProfile = (username) =>
+  jsonFetch("/api/me/profile", { method: "POST", body: { username } });
+export const apiChangeMyPassword = (oldPassword, newPassword) =>
+  jsonFetch("/api/me/password", { method: "POST", body: { oldPassword, newPassword } });
