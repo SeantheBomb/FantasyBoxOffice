@@ -45,6 +45,8 @@ export const apiBid = (id, amount) =>
   jsonFetch(`/api/auctions/${id}/bid`, { method: "POST", body: { amount } });
 export const apiSettleAuction = (id) =>
   jsonFetch(`/api/auctions/${id}/settle`, { method: "POST", body: {} });
+export const apiPassAuction = (id) =>
+  jsonFetch(`/api/auctions/${id}/pass`, { method: "POST", body: {} });
 
 // TMDB releases (already public)
 export const apiReleases = (params = {}) => {

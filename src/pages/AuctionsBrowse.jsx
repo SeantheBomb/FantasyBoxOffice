@@ -95,23 +95,32 @@ function StartAuctionButton({ onCreated }) {
   }
   const filtered = unowned ? unowned.filter((m) => m.title.toLowerCase().includes(query.toLowerCase())) : [];
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ background: "white", padding: 20, borderRadius: 8, width: "min(720px, 96vw)", maxHeight: "90vh", overflow: "auto" }}>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <h3>Start an auction</h3>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: "var(--fbo-bg-panel)", color: "var(--fbo-text)", padding: 20, borderRadius: 8, width: "min(720px, 96vw)", maxHeight: "90vh", overflow: "auto", border: "1px solid var(--fbo-border)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h3 style={{ margin: 0 }}>Start an auction</h3>
           <button onClick={() => setOpen(false)}>Close</button>
         </div>
-        {err && <div style={{ color: "crimson", marginBottom: 8 }}>{err}</div>}
-        <input placeholder="Search movie..." value={query} onChange={(e) => setQuery(e.target.value)} style={{ width: "100%", marginBottom: 8 }} />
+        {err && <div style={{ color: "var(--fbo-danger)", marginBottom: 8 }}>{err}</div>}
+        <input placeholder="Search movie..." value={query} onChange={(e) => setQuery(e.target.value)} style={{ width: "100%", marginTop: 12, marginBottom: 8 }} />
         {!unowned ? <div>Loading...</div> : (
-          <div style={{ maxHeight: 280, overflow: "auto", border: "1px solid #eee", borderRadius: 6 }}>
-            {filtered.map((m) => (
-              <div key={m.tmdb_id} onClick={() => setSelected(m)}
-                style={{ padding: 8, cursor: "pointer", background: selected?.tmdb_id === m.tmdb_id ? "#eef" : "transparent", borderBottom: "1px solid #f0f0f0" }}>
-                <b>{m.title}</b> · {m.release_date}
-              </div>
-            ))}
-            {filtered.length === 0 && <div style={{ padding: 8, color: "#888" }}>No matches.</div>}
+          <div style={{ maxHeight: 280, overflow: "auto", border: "1px solid var(--fbo-border)", borderRadius: 6 }}>
+            {filtered.map((m) => {
+              const isSel = selected?.tmdb_id === m.tmdb_id;
+              return (
+                <div key={m.tmdb_id} onClick={() => setSelected(m)}
+                  style={{
+                    padding: 8,
+                    cursor: "pointer",
+                    background: isSel ? "var(--fbo-gold)" : "transparent",
+                    color: isSel ? "#1a0000" : "var(--fbo-text)",
+                    borderBottom: "1px solid var(--fbo-border)",
+                  }}>
+                  <b>{m.title}</b> · {m.release_date}
+                </div>
+              );
+            })}
+            {filtered.length === 0 && <div style={{ padding: 8, color: "var(--fbo-text-muted)" }}>No matches.</div>}
           </div>
         )}
         {selected && (

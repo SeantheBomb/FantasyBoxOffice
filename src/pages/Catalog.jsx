@@ -73,13 +73,13 @@ export default function Catalog() {
         <thead>
           <tr style={{ textAlign: "left", color: "var(--fbo-text-muted)", background: "rgba(255,255,255,0.04)" }}>
             <th style={{ padding: 8 }}>Movie</th>
-            <th>Release</th>
-            <th>Status</th>
-            <th style={{ textAlign: "right" }}>Popularity</th>
-            <th>Owner</th>
-            <th style={{ textAlign: "right" }}>Budget</th>
-            <th style={{ textAlign: "right" }}>Revenue</th>
-            <th style={{ textAlign: "right" }}>Profit</th>
+            <th style={{ padding: "8px 12px" }}>Release</th>
+            <th style={{ padding: "8px 12px" }}>Status</th>
+            <th style={{ textAlign: "right", padding: "8px 16px" }}>Popularity</th>
+            <th style={{ padding: "8px 12px" }}>Owner</th>
+            <th style={{ textAlign: "right", padding: "8px 12px" }}>Budget</th>
+            <th style={{ textAlign: "right", padding: "8px 12px" }}>Revenue</th>
+            <th style={{ textAlign: "right", padding: "8px 12px" }}>Profit</th>
           </tr>
         </thead>
         <tbody>
@@ -96,13 +96,13 @@ export default function Catalog() {
                   {m.is_void && <span style={{ marginLeft: 6, fontSize: 11, color: "#b00020" }}>VOID</span>}
                 </div>
               </td>
-              <td>{m.release_date}</td>
-              <td>{m.status}</td>
-              <td style={{ textAlign: "right" }}>{m.popularity ? m.popularity.toFixed(1) : "—"}</td>
-              <td>{m.owner_username || <span style={{ color: "#999" }}>—</span>}</td>
-              <td style={{ textAlign: "right" }}>{fullCurrency(m.budget)}</td>
-              <td style={{ textAlign: "right" }}>{fullCurrency(m.revenue)}</td>
-              <td style={{ textAlign: "right", color: profitColor(m.profit) }}>{fullCurrency(m.profit)}</td>
+              <td style={{ padding: "8px 12px" }}>{m.release_date}</td>
+              <td style={{ padding: "8px 12px" }}>{m.status}</td>
+              <td style={{ textAlign: "right", padding: "8px 16px" }}>{m.popularity ? m.popularity.toFixed(1) : "—"}</td>
+              <td style={{ padding: "8px 12px" }}>{m.owner_username || <span style={{ color: "#999" }}>—</span>}</td>
+              <td style={{ textAlign: "right", padding: "8px 12px" }}>{fullCurrency(m.budget)}</td>
+              <td style={{ textAlign: "right", padding: "8px 12px" }}>{fullCurrency(m.revenue)}</td>
+              <td style={{ textAlign: "right", padding: "8px 12px", color: profitColor(m.profit) }}>{fullCurrency(m.profit)}</td>
             </tr>
           ))}
         </tbody>

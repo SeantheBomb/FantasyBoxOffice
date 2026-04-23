@@ -69,3 +69,55 @@ export async function settleExpiredAuctions(db) {
   }
   return { settled, skipped, checked: results?.length || 0 };
 }
+
+// Returns eligible bidder user ids — real accounts, excludes placeholders from
+// TSV import so unclaimed seats don't block auto-settlement.
+export async function eligibleBidderIds(db) {
+  const { results } = await db
+    .prepare(`SELECT id FROM users WHERE email NOT LIKE '%@placeholder.invalid'`)
+    .all();
+  return (results || []).map((r) => r.id);
+}
+
+// Settle an auction immediately when every eligible bidder except the current
+// leader has passed. No-op if the condition isn't met. Bypasses the ends_at
+// check — the whole point of passes is early resolution.
+export async function settleIfAllPassed(db, auctionId) {
+  const a = await db
+    .prepare(
+      `SELECT id, tmdb_id, status, current_bid, current_bidder_id
+         FROM auctions WHERE id = ? LIMIT 1`
+    )
+    .bind(auctionId)
+    .first();
+  if (!a || a.status !== "open") return { settled: false, reason: "not_open" };
+
+  const eligible = await eligibleBidderIds(db);
+  const others = eligible.filter((id) => id !== a.current_bidder_id);
+  if (!others.length) return { settled: false, reason: "no_other_bidders" };
+
+  const { results: passRows } = await db
+    .prepare(`SELECT user_id FROM auction_passes WHERE auction_id = ?`)
+    .bind(auctionId)
+    .all();
+  const passedIds = new Set((passRows || []).map((r) => r.user_id));
+  const allPassed = others.every((id) => passedIds.has(id));
+  if (!allPassed) return { settled: false, reason: "passes_pending" };
+
+  const now = new Date().toISOString();
+  await db.batch([
+    db
+      .prepare(
+        `INSERT INTO owned_movies (tmdb_id, owner_user_id, purchase_price, is_void, acquired_at)
+         VALUES (?, ?, ?, 0, ?)`
+      )
+      .bind(a.tmdb_id, a.current_bidder_id, a.current_bid, now),
+    db
+      .prepare(`UPDATE users SET points_remaining = points_remaining - ? WHERE id = ?`)
+      .bind(a.current_bid, a.current_bidder_id),
+    db
+      .prepare(`UPDATE auctions SET status = 'sold', settled_at = ? WHERE id = ?`)
+      .bind(now, a.id),
+  ]);
+  return { settled: true, tmdbId: a.tmdb_id, winnerId: a.current_bidder_id, price: a.current_bid };
+}

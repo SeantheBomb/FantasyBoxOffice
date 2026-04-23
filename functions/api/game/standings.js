@@ -74,6 +74,10 @@ export async function onRequestGet({ request, env }) {
     });
   }
 
+  for (const u of byUser.values()) {
+    u.movies.sort((a, b) => (a.release_date || "").localeCompare(b.release_date || ""));
+  }
+
   const ranked = [...byUser.values()].sort((a, b) => b.total_profit - a.total_profit);
   return json({ users: ranked });
 }

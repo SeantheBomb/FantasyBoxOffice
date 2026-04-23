@@ -1,4 +1,5 @@
 import { json, badRequest, requireUser, notFound } from "../../_auth";
+import { settleIfAllPassed } from "../../_settlement";
 
 const EXTEND_MS = 5 * 60 * 1000;
 
@@ -41,7 +42,15 @@ export async function onRequestPost({ request, env, params }) {
     env.DB.prepare(
       `INSERT INTO auction_bids (id, auction_id, user_id, amount, bid_at) VALUES (?, ?, ?, ?, ?)`
     ).bind(crypto.randomUUID(), auction.id, user.id, amount, now),
+    // Bidding implicitly retracts a prior pass — you're back in the fight.
+    env.DB.prepare(
+      `DELETE FROM auction_passes WHERE auction_id = ? AND user_id = ?`
+    ).bind(auction.id, user.id),
   ]);
+
+  // After the current bidder flips, the new leader may already have everyone
+  // else passed against them — settle if so.
+  await settleIfAllPassed(env.DB, auction.id);
 
   return json({ ok: true, current_bid: amount, ends_at: extended });
 }

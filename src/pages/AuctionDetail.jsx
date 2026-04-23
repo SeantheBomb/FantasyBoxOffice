@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { apiAuction, apiBid, apiSettleAuction } from "../api";
+import { apiAuction, apiBid, apiSettleAuction, apiPassAuction } from "../api";
 import { timeRemaining, fullCurrency } from "../format";
 import { useUser } from "../useUser";
 
@@ -50,6 +50,14 @@ export default function AuctionDetail() {
     else setErr(r.data?.error || "Settle failed");
   }
 
+  async function passNow() {
+    setErr("");
+    const r = await apiPassAuction(id);
+    if (!r.ok) return setErr(r.data?.error || "Pass failed");
+    refresh();
+    reload();
+  }
+
   if (!data) return <div>Loading auction...</div>;
   const a = data.auction;
   const ended = new Date(a.ends_at).getTime() <= now;
@@ -74,21 +82,38 @@ export default function AuctionDetail() {
       </div>
 
       {a.status === "open" && !ended && (
-        <form onSubmit={submitBid} style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center" }}>
-          <input
-            type="number"
-            min={minBid}
-            placeholder={`Min ${minBid}`}
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            style={{ width: 120 }}
-            disabled={isMyBid}
-          />
-          <button type="submit" disabled={busy || isMyBid}>
-            {isMyBid ? "You're the top bidder" : busy ? "Bidding..." : "Place bid"}
-          </button>
-          <span style={{ color: "#666" }}>You have {user?.points_remaining ?? "—"} pts</span>
-        </form>
+        <>
+          <form onSubmit={submitBid} style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <input
+              type="number"
+              min={minBid}
+              placeholder={`Min ${minBid}`}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              style={{ width: 120 }}
+              disabled={isMyBid}
+            />
+            <button type="submit" disabled={busy || isMyBid}>
+              {isMyBid ? "You're the top bidder" : busy ? "Bidding..." : "Place bid"}
+            </button>
+            {!isMyBid && (
+              <button type="button" onClick={passNow} disabled={busy || data.my_passed}
+                style={{ background: "#3a2f44", color: "var(--fbo-text)", border: "1px solid var(--fbo-border)" }}>
+                {data.my_passed ? "Passed" : "Pass"}
+              </button>
+            )}
+            <span style={{ color: "var(--fbo-text-muted)" }}>You have {user?.points_remaining ?? "—"} pts</span>
+          </form>
+          {data.passes.length > 0 && (
+            <div style={{ marginTop: 10, fontSize: 13, color: "var(--fbo-text-muted)" }}>
+              Passed ({data.passes.length}/{Math.max(0, data.eligible_count - 1)}):{" "}
+              {data.passes.map((p) => p.username).join(", ")}
+              {data.remaining_bidders > 0 && (
+                <> · {data.remaining_bidders} still in</>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       {a.status === "open" && ended && (
