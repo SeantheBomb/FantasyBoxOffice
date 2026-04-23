@@ -42,11 +42,11 @@ export default function MyMovies() {
         <b style={{ color: profitColor(data.total_profit) }}>{fullCurrency(data.total_profit)}</b>
       </p>
       {data.movies.length === 0 ? (
-        <div style={{ color: "#888" }}>You don&apos;t own any movies yet. <Link to="/auctions">Go bid on some.</Link></div>
+        <div style={{ color: "var(--fbo-text-muted)" }}>You don&apos;t own any movies yet. <Link to="/auctions">Go bid on some.</Link></div>
       ) : (
-        <table style={{ width: "100%", background: "white", border: "1px solid #eee", borderRadius: 8, borderCollapse: "collapse" }}>
+        <table style={{ width: "100%", background: "var(--fbo-bg-card)", border: "1px solid var(--fbo-border)", borderRadius: 8, borderCollapse: "collapse" }}>
           <thead>
-            <tr style={{ textAlign: "left", color: "#666", background: "#fafafa" }}>
+            <tr style={{ textAlign: "left", color: "var(--fbo-text-muted)", background: "rgba(255,255,255,0.04)" }}>
               <th style={{ padding: 8 }}>Movie</th>
               <th>Release</th>
               <th>Status</th>
@@ -59,10 +59,10 @@ export default function MyMovies() {
           </thead>
           <tbody>
             {data.movies.map((m) => (
-              <tr key={m.tmdb_id} style={{ borderTop: "1px solid #f0f0f0", opacity: m.is_void ? 0.5 : 1 }}>
+              <tr key={m.tmdb_id} style={{ borderTop: "1px solid var(--fbo-border)", opacity: m.is_void ? 0.5 : 1 }}>
                 <td style={{ padding: 8 }}>
                   <Link to={`/movie/${m.tmdb_id}`}>{m.title}</Link>
-                  {m.is_void && <span style={{ marginLeft: 6, fontSize: 11, color: "#b00020" }}>VOID</span>}
+                  {m.is_void && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--fbo-danger)" }}>VOID</span>}
                 </td>
                 <td>{m.release_date}</td>
                 <td>{m.status}</td>

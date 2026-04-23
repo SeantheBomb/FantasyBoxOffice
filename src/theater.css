@@ -153,9 +153,47 @@ table tbody tr { border-top-color: rgba(255,255,255,0.05) !important; }
 
 /* Override the white panels from earlier inline styles */
 section[style*="background: white"],
-div[style*="background: white"] {
+div[style*="background: white"],
+table[style*="background: white"],
+table[style*="background:white"] {
   background: var(--fbo-bg-card) !important;
   border-color: var(--fbo-border) !important;
+}
+
+/* Light-gray header rows from earlier inline styles */
+tr[style*="background: #fafafa"],
+tr[style*="background:#fafafa"] {
+  background: rgba(255,255,255,0.04) !important;
+}
+
+/* Light-gray text commonly used for muted labels / empty states */
+[style*="color: #666"],
+[style*="color:#666"],
+[style*="color: #888"],
+[style*="color:#888"],
+[style*="color: #999"],
+[style*="color:#999"],
+[style*="color: #bbb"],
+[style*="color:#bbb"] {
+  color: var(--fbo-text-muted) !important;
+}
+
+/* Near-white borders get pulled into the theme */
+[style*="1px solid #eee"],
+[style*="1px solid #f0f0f0"] {
+  border-color: var(--fbo-border) !important;
+}
+
+/* Empty-poster placeholders were light gray; blend into cards */
+div[style*="background: #f0f0f0"] {
+  background: #2a2330 !important;
+  color: #5d4d6a !important;
+}
+
+/* Inline pre blocks (e.g. admin response panel) */
+pre[style*="background: #fafafa"] {
+  background: #0f0c12 !important;
+  color: var(--fbo-text) !important;
 }
 
 input, select, textarea, button {
