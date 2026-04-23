@@ -99,6 +99,20 @@ export async function getMovieDetail(id, token) {
   return tmdbFetch(`/movie/${id}`, token);
 }
 
+// Search TMDB by title (optionally constrained by year). Used by TSV import to
+// resolve titles the main discover call didn't return — e.g., untitled sequels
+// listed under working titles, or movies that haven't been flagged as US
+// theatrical on TMDB yet.
+export async function searchMovie(title, year, token) {
+  const data = await tmdbFetch("/search/movie", token, {
+    query: title,
+    year: year || undefined,
+    include_adult: false,
+    language: "en-US",
+  });
+  return data?.results || [];
+}
+
 // Upsert a batch of movies into the D1 `movies` table. Budget is only
 // written on INSERT (or when a real budget comes through backfillBudgets) —
 // the UPDATE path leaves existing budget alone so the catalog refresh

@@ -1,6 +1,7 @@
 import { json, badRequest, requireAdmin } from "../../_auth";
 import { hashPasswordPBKDF2 } from "../../_crypto";
 import { parseTsv, normalizeTitle } from "../../_tsv";
+import { searchMovie, posterUrl } from "../../_tmdb";
 
 export async function onRequestPost({ request, env }) {
   const { user, response } = await requireAdmin(request, env);
@@ -19,11 +20,15 @@ export async function onRequestPost({ request, env }) {
   const now = new Date().toISOString();
   const report = {
     players: { created: 0, matched: 0, placeholder_emails: [] },
-    movies: { matched: 0, missing: [] },
+    movies: { matched: 0, missing: [], searched: 0, added_via_search: [] },
     owned: { upserted: 0 },
     voided: 0,
     dailies: { upserted: 0 },
   };
+
+  const token = env.TMDB_TOKEN;
+  // Cap TMDB search calls so we don't blow the subrequest budget.
+  const SEARCH_BUDGET = 25;
 
   // Players: match by case-insensitive username or real_name. Create a
   // placeholder user for any player not already in the DB — the admin can
@@ -72,7 +77,54 @@ export async function onRequestPost({ request, env }) {
 
   for (const m of parsed.movies) {
     const key = normalizeTitle(m.title);
-    const found = titleIdx.get(key);
+    let found = titleIdx.get(key);
+
+    // Fallback: the local catalog is built from a US-theatrical discover call,
+    // which misses movies with working titles / uncategorized release types.
+    // Ask TMDB directly, prefer a result whose (normalized) title matches, and
+    // upsert it into `movies` so future imports don't need to re-search.
+    if (!found && token && report.movies.searched < SEARCH_BUDGET) {
+      report.movies.searched += 1;
+      const year = m.releaseDate ? Number(m.releaseDate.slice(0, 4)) : null;
+      let results = [];
+      try {
+        results = await searchMovie(m.title, year, token);
+      } catch {
+        results = [];
+      }
+      // If nothing matched with year filter, try a looser search.
+      if (!results.length && year) {
+        try { results = await searchMovie(m.title, null, token); } catch { results = []; }
+      }
+      const exact = results.find((r) => normalizeTitle(r.title) === key)
+        || results.find((r) => normalizeTitle(r.original_title) === key)
+        || results[0];
+      if (exact && exact.id) {
+        const releaseDate = exact.release_date || m.releaseDate || null;
+        await env.DB.prepare(
+          `INSERT INTO movies (tmdb_id, title, release_date, budget, poster_url, popularity, status, tmdb_updated_at, created_at)
+           VALUES (?, ?, ?, 0, ?, ?, 'unreleased', ?, ?)
+           ON CONFLICT(tmdb_id) DO UPDATE SET
+             title = excluded.title,
+             release_date = excluded.release_date,
+             poster_url = excluded.poster_url,
+             popularity = excluded.popularity,
+             tmdb_updated_at = excluded.tmdb_updated_at`
+        ).bind(
+          exact.id,
+          exact.title || m.title,
+          releaseDate,
+          posterUrl(exact.poster_path),
+          exact.popularity || 0,
+          now,
+          now
+        ).run();
+        found = { tmdb_id: exact.id, title: exact.title || m.title, budget: 0 };
+        titleIdx.set(key, found);
+        report.movies.added_via_search.push({ tsv: m.title, tmdb: exact.title, tmdb_id: exact.id });
+      }
+    }
+
     if (!found) {
       report.movies.missing.push(m.title);
       continue;
