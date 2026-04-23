@@ -69,9 +69,9 @@ export default function Catalog() {
           style={{ flex: 1, minWidth: 200 }}
         />
       </div>
-      <table style={{ width: "100%", background: "white", border: "1px solid #eee", borderRadius: 8, borderCollapse: "collapse" }}>
+      <table style={{ width: "100%", background: "var(--fbo-bg-card)", border: "1px solid var(--fbo-border)", borderRadius: 8, borderCollapse: "collapse" }}>
         <thead>
-          <tr style={{ textAlign: "left", color: "#666", background: "#fafafa" }}>
+          <tr style={{ textAlign: "left", color: "var(--fbo-text-muted)", background: "rgba(255,255,255,0.04)" }}>
             <th style={{ padding: 8 }}>Movie</th>
             <th>Release</th>
             <th>Status</th>
@@ -84,7 +84,7 @@ export default function Catalog() {
         </thead>
         <tbody>
           {filtered.map((m) => (
-            <tr key={m.tmdb_id} style={{ borderTop: "1px solid #f0f0f0", opacity: m.is_void ? 0.5 : 1 }}>
+            <tr key={m.tmdb_id} style={{ borderTop: "1px solid var(--fbo-border)", opacity: m.is_void ? 0.5 : 1 }}>
               <td style={{ padding: 8 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   {m.poster_url ? (
@@ -124,11 +124,11 @@ const posterThumbEmpty = {
   width: 36,
   height: 54,
   borderRadius: 3,
-  background: "#f0f0f0",
+  background: "#2a2330",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  color: "#bbb",
+  color: "#5d4d6a",
   fontSize: 18,
   flexShrink: 0,
 };
