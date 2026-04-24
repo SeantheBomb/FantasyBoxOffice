@@ -7,7 +7,10 @@
 // per user are sorted by release_date ascending. Budget only counts against
 // profit once the movie is released — unreleased picks stay at 0.
 
+import { bootstrapSchema } from "../_schema.js";
+
 export async function computeStandings(db) {
+  await bootstrapSchema(db);
   const usersQ = db.prepare(
     `SELECT id, username, real_name, points_remaining FROM users WHERE in_league = 1 ORDER BY username`
   ).all();

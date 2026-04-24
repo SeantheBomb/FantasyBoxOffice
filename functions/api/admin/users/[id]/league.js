@@ -1,4 +1,5 @@
 import { json, badRequest, requireAdmin, notFound } from "../../../_auth";
+import { bootstrapSchema } from "../../../_schema";
 
 export async function onRequestPost({ request, env, params }) {
   const { user, response } = await requireAdmin(request, env);
@@ -7,6 +8,7 @@ export async function onRequestPost({ request, env, params }) {
   const body = await request.json().catch(() => null);
   if (!body || typeof body.in_league !== "boolean") return badRequest("in_league boolean required");
 
+  await bootstrapSchema(env.DB);
   const target = await env.DB.prepare(`SELECT id FROM users WHERE id = ?`)
     .bind(params.id).first();
   if (!target) return notFound();

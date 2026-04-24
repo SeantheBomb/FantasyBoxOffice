@@ -6,7 +6,10 @@
 // and revenues[tmdbId][j] is domestic revenue for that movie at dates[j]
 // (null if not yet released at that date).
 
+import { bootstrapSchema } from "../_schema.js";
+
 export async function computeHistory(db, { season = "2026" } = {}) {
+  await bootstrapSchema(db);
   const seasonStart = `${season}-01-01`;
   const seasonEnd = `${season}-12-31`;
 

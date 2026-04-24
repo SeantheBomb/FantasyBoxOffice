@@ -1,9 +1,11 @@
 import { json, requireAdmin } from "../../_auth";
+import { bootstrapSchema } from "../../_schema";
 
 export async function onRequestGet({ request, env }) {
   const { user, response } = await requireAdmin(request, env);
   if (!user) return response;
 
+  await bootstrapSchema(env.DB);
   const { results } = await env.DB.prepare(
     `SELECT u.id, u.email, u.username, u.real_name, u.is_admin, u.in_league, u.points_remaining, u.created_at,
             (SELECT COUNT(*) FROM owned_movies o WHERE o.owner_user_id = u.id AND o.is_void = 0) AS owned_count
