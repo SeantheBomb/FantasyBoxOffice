@@ -60,32 +60,30 @@ const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct",
 
 // Chart.js config for the weekly profit chart. Dark-friendly but exported
 // over a white background so it reads in Discord's light and dark themes.
+//
+// Two-layer X-axis: the primary `x` scale shows movie titles at release weeks;
+// a secondary `months` scale (also at position "bottom", so it renders below)
+// shows month abbreviations at the first Sunday of each month.
 export function buildChartConfig(history) {
   const { dates = [], series = [], releaseWeeks = {} } = history || {};
 
-  // Each label is a string or array-of-strings (Chart.js renders arrays as
-  // multi-line ticks). Show the 3-letter month at the first Sunday of each
-  // month (day ≤ 7) and show movie titles at release weeks.
-  const labels = dates.map((d) => {
-    const parts = d.split("-").map(Number); // [YYYY, MM, DD]
-    const isFirstWeekOfMonth = parts[2] <= 7;
-    const monthLabel = isFirstWeekOfMonth ? MONTH_ABBR[parts[1] - 1] : null;
-
+  // Primary x-axis: movie title at release week, empty string otherwise.
+  const movieLabels = dates.map((d) => {
     const entries = releaseWeeks[d];
-    const movieLabel = entries?.length
-      ? entries.map((e) => (e.title.length > 16 ? e.title.slice(0, 14) + "…" : e.title)).join(" / ")
-      : null;
+    if (!entries?.length) return "";
+    return entries.map((e) => (e.title.length > 16 ? e.title.slice(0, 14) + "…" : e.title)).join(" / ");
+  });
 
-    if (monthLabel && movieLabel) return [monthLabel, movieLabel];
-    if (monthLabel) return monthLabel;
-    if (movieLabel) return movieLabel;
-    return "";
+  // Secondary x-axis: month abbreviation at the first Sunday of each month.
+  const monthLabels = dates.map((d) => {
+    const parts = d.split("-");
+    return Number(parts[2]) <= 7 ? MONTH_ABBR[Number(parts[1]) - 1] : "";
   });
 
   return {
     type: "line",
     data: {
-      labels,
+      labels: movieLabels,
       datasets: series.map((s, i) => ({
         label: s.username,
         data: s.points,
@@ -102,12 +100,26 @@ export function buildChartConfig(history) {
         legend: { position: "top" },
       },
       scales: {
-        x: { ticks: { maxRotation: 65, minRotation: 65, autoSkip: false } },
-        // QuickChart parses any string starting with "function" as JS server-side.
+        // Primary x-axis: movie titles, rotated so they don't overlap.
+        x: {
+          ticks: { maxRotation: 65, minRotation: 65, autoSkip: false },
+        },
+        // Secondary x-axis: month labels, flat, drawn below the movie titles.
+        months: {
+          type: "category",
+          labels: monthLabels,
+          position: "bottom",
+          display: true,
+          grid: { display: false, drawTicks: false },
+          ticks: { maxRotation: 0, minRotation: 0, autoSkip: false, font: { weight: "bold" } },
+        },
+        // Y-axis: dollar-formatted values.
+        // QuickChart evals strings starting with "function" or "(" server-side.
         y: {
           display: true,
           ticks: {
-            callback: "function(value){var a=Math.abs(value);var s=value<0?'-':'';if(a>=1e9)return s+'$'+(a/1e9).toFixed(1)+'B';if(a>=1e6)return s+'$'+(a/1e6).toFixed(0)+'M';if(a>=1e3)return s+'$'+(a/1e3).toFixed(0)+'K';return s+'$'+a;}",
+            display: true,
+            callback: "(v) => { var a=Math.abs(v), p=v<0?'-$':'$'; if(a>=1e9) return p+(a/1e9).toFixed(1)+'B'; if(a>=1e6) return p+(a/1e6).toFixed(0)+'M'; if(a>=1e3) return p+(a/1e3).toFixed(0)+'K'; return p+a; }",
           },
         },
       },
@@ -122,7 +134,7 @@ export async function renderChartPng(config) {
   const body = {
     chart: config,
     width: 1000,
-    height: 520,
+    height: 600,
     backgroundColor: "white",
     format: "png",
     version: "4",
