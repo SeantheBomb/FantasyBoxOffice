@@ -30,7 +30,7 @@ export default function Standings() {
 
       <section style={{ marginBottom: 24 }}>
         <h3>Total Profit Over Time</h3>
-        <ProfitChart dates={history.dates} series={history.series} movies={history.movies || []} revenues={history.revenues || {}} />
+        <ProfitChart dates={history.dates} series={history.series} movies={history.movies || []} revenues={history.revenues || {}} releaseWeeks={history.releaseWeeks || {}} />
       </section>
 
       <section>

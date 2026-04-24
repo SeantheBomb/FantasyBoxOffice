@@ -1,10 +1,12 @@
 // Pure history/chart computation — shared by the Pages Function endpoint
 // and the Discord worker (chart generation). Returns
-//   { dates, series, movies, revenues, season }
-// where series[i].points[j] is per-user cumulative profit at dates[j],
-// movies is the list of owned in-season movies with owner/budget info,
-// and revenues[tmdbId][j] is domestic revenue for that movie at dates[j]
-// (null if not yet released at that date).
+//   { dates, series, movies, revenues, releaseWeeks, season }
+//
+// dates: weekly Sundays for the full season
+// series[i].points[j]: cumulative profit at dates[j], null for future dates
+// revenues[tmdbId][j]: domestic revenue at dates[j], null if future or pre-release
+// releaseWeeks: { [weekDate]: [{ tmdb_id, title }] } — owned movies keyed to
+//   their first weekly sample on or after their release date
 
 import { bootstrapSchema } from "../_schema.js";
 
@@ -12,6 +14,7 @@ export async function computeHistory(db, { season = "2026" } = {}) {
   await bootstrapSchema(db);
   const seasonStart = `${season}-01-01`;
   const seasonEnd = `${season}-12-31`;
+  const today = new Date().toISOString().slice(0, 10);
 
   const [users, movies, owned, dailies] = await Promise.all([
     db.prepare(`SELECT id, username FROM users WHERE in_league = 1 ORDER BY username`).all(),
@@ -58,47 +61,46 @@ export async function computeHistory(db, { season = "2026" } = {}) {
     return rev;
   }
 
-  const sampleSet = new Set([seasonStart, seasonEnd]);
-  for (const r of releaseByTmdb.values()) {
-    if (r && r >= seasonStart && r <= seasonEnd) sampleSet.add(r);
-  }
-  const today = new Date().toISOString().slice(0, 10);
-  if (today >= seasonStart && today <= seasonEnd) sampleSet.add(today);
+  // Weekly Sunday sample dates only — no daily or release-date entries.
+  const dates = [];
   {
     const d = new Date(seasonStart + "T00:00:00Z");
     while (d.getUTCDay() !== 0) d.setUTCDate(d.getUTCDate() + 1);
     while (true) {
       const iso = d.toISOString().slice(0, 10);
       if (iso > seasonEnd) break;
-      sampleSet.add(iso);
+      dates.push(iso);
       d.setUTCDate(d.getUTCDate() + 7);
     }
   }
-  const dates = [...sampleSet].sort();
 
   const userRows = users.results || [];
   const series = userRows.map((u) => ({ userId: u.id, username: u.username, points: [] }));
   const userIdToSeriesIdx = new Map(userRows.map((u, i) => [u.id, i]));
 
   for (const date of dates) {
+    if (date > today) {
+      // Future week — leave all points null so the chart draws no line.
+      for (let i = 0; i < series.length; i++) series[i].points.push(null);
+      continue;
+    }
     const totals = new Array(userRows.length).fill(0);
     for (const [tmdbId, ownerId] of ownerByTmdb.entries()) {
       const release = releaseByTmdb.get(tmdbId);
       if (!release || release > date) continue;
       const idx = userIdToSeriesIdx.get(ownerId);
       if (idx == null) continue;
-      const revenue = revenueOnOrBefore(tmdbId, date);
-      totals[idx] += revenue - (budgetByTmdb.get(tmdbId) || 0);
+      totals[idx] += revenueOnOrBefore(tmdbId, date) - (budgetByTmdb.get(tmdbId) || 0);
     }
     for (let i = 0; i < series.length; i++) series[i].points.push(totals[i]);
   }
 
-  // Build per-movie metadata and revenue timeline for the client tooltip.
+  // Per-movie metadata and revenue timeline for the tooltip.
   const moviesList = [];
   const revenues = {};
   for (const [tmdbId, ownerId] of ownerByTmdb.entries()) {
     const release = releaseByTmdb.get(tmdbId);
-    if (!release) continue; // not an in-season movie
+    if (!release) continue;
     moviesList.push({
       tmdb_id: tmdbId,
       title: titleByTmdb.get(tmdbId) || "",
@@ -107,10 +109,24 @@ export async function computeHistory(db, { season = "2026" } = {}) {
       budget: budgetByTmdb.get(tmdbId) || 0,
     });
     revenues[tmdbId] = dates.map((date) => {
-      if (release > date) return null;
+      if (date > today || release > date) return null;
       return revenueOnOrBefore(tmdbId, date);
     });
   }
 
-  return { dates, series, season, movies: moviesList, revenues };
+  // Map each owned movie to its first weekly sample on or after release_date.
+  // Both past and future releases are included so the chart can show upcoming
+  // milestones as dimmed markers.
+  const releaseWeeks = {};
+  for (const m of moviesList) {
+    const weekDate = dates.find((d) => d >= m.release_date);
+    if (!weekDate) continue;
+    (releaseWeeks[weekDate] = releaseWeeks[weekDate] || []).push({
+      tmdb_id: m.tmdb_id,
+      title: m.title,
+      past: m.release_date <= today,
+    });
+  }
+
+  return { dates, series, season, movies: moviesList, revenues, releaseWeeks };
 }

@@ -1,47 +1,49 @@
 import { useMemo, useRef, useState } from "react";
 
 const COLORS = ["#60a5fa", "#f87171", "#fbbf24", "#34d399", "#c084fc", "#fb923c", "#22d3ee", "#f472b6"];
-
 const VW = 1000;
 const VH = 420;
-const PAD = { l: 65, r: 15, t: 20, b: 110 };
+const PAD = { l: 65, r: 15, t: 20, b: 115 };
 
-export default function ProfitChart({ dates, series, movies = [], revenues = {} }) {
+export default function ProfitChart({ dates, series, movies = [], revenues = {}, releaseWeeks = {} }) {
   const [hoverIdx, setHoverIdx] = useState(null);
   const svgRef = useRef(null);
-  const layout = useMemo(() => computeLayout(dates, series), [dates, series]);
 
-  const moviesByDate = useMemo(() => {
-    const map = {};
-    for (const m of movies) {
-      if (m.release_date) (map[m.release_date] = map[m.release_date] || []).push(m.title);
-    }
-    return map;
-  }, [movies]);
-
-  const releaseIdxs = useMemo(
-    () => (dates || []).map((d, i) => (moviesByDate[d] ? i : null)).filter((i) => i != null),
-    [dates, moviesByDate]
+  const { x, y, yTicks } = useMemo(
+    () => computeLayout(dates, series, releaseWeeks),
+    [dates, series, releaseWeeks]
   );
+
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   if (!dates?.length || !series?.length) {
     return <div style={{ color: "#a49784", padding: 16 }}>No chart data yet — waiting on daily revenue updates.</div>;
   }
 
-  const { x, y, yTicks } = layout;
   const axisY = VH - PAD.b;
 
+  // Find nearest past data point to mouse X using the weighted x() function.
   function handleMouseMove(e) {
     const svg = svgRef.current;
     if (!svg) return;
     const rect = svg.getBoundingClientRect();
     const svgX = ((e.clientX - rect.left) / rect.width) * VW;
-    const n = dates.length;
-    const idx = Math.round(((svgX - PAD.l) / (VW - PAD.l - PAD.r)) * (n - 1));
-    setHoverIdx(Math.max(0, Math.min(n - 1, idx)));
+    let best = -1, bestDist = Infinity;
+    for (let i = 0; i < dates.length; i++) {
+      if (dates[i] > today) break; // past dates come first; stop at first future
+      const dist = Math.abs(x(i) - svgX);
+      if (dist < bestDist) { bestDist = dist; best = i; }
+    }
+    setHoverIdx(best >= 0 ? best : null);
   }
 
   const tooltip = hoverIdx != null ? buildTooltip(hoverIdx, dates, series, movies, revenues) : null;
+
+  // "Today" marker: last past weekly sample
+  let todayIdx = -1;
+  for (let i = dates.length - 1; i >= 0; i--) {
+    if (dates[i] <= today) { todayIdx = i; break; }
+  }
 
   return (
     <div style={{ position: "relative", background: "#1e1822", border: "1px solid #352d3e", borderRadius: 8, padding: 16 }}>
@@ -54,7 +56,7 @@ export default function ProfitChart({ dates, series, movies = [], revenues = {} 
         onMouseMove={handleMouseMove}
         onMouseLeave={() => setHoverIdx(null)}
       >
-        {/* Y grid lines + labels */}
+        {/* Y grid + labels */}
         {yTicks.map((t) => (
           <g key={"y" + t}>
             <line x1={PAD.l} x2={VW - PAD.r} y1={y(t)} y2={y(t)}
@@ -66,51 +68,72 @@ export default function ProfitChart({ dates, series, movies = [], revenues = {} 
           </g>
         ))}
 
-        {/* X axis line */}
+        {/* X axis */}
         <line x1={PAD.l} x2={VW - PAD.r} y1={axisY} y2={axisY} stroke="#352d3e" />
 
-        {/* Series lines */}
+        {/* Series lines — M on first point or after a null gap, L otherwise */}
         {series.map((s, si) => {
-          const pts = s.points.map((v, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-          return <path key={s.username} d={pts} stroke={COLORS[si % COLORS.length]} strokeWidth={2} fill="none" />;
+          let d = "";
+          for (let i = 0; i < s.points.length; i++) {
+            const v = s.points[i];
+            if (v == null) continue;
+            const prevNull = i === 0 || s.points[i - 1] == null;
+            d += `${prevNull ? "M" : "L"}${x(i).toFixed(1)},${y(v).toFixed(1)} `;
+          }
+          return <path key={s.username} d={d} stroke={COLORS[si % COLORS.length]} strokeWidth={2} fill="none" />;
         })}
 
-        {/* Release-date vertical marks + rotated movie title labels */}
-        {releaseIdxs.map((i) => {
-          const label = (moviesByDate[dates[i]] || [])
-            .map((t) => (t.length > 22 ? t.slice(0, 20) + "…" : t))
-            .join(" / ");
+        {/* "Today" end-of-data marker */}
+        {todayIdx >= 0 && (
+          <line x1={x(todayIdx)} x2={x(todayIdx)} y1={PAD.t} y2={axisY}
+            stroke="#5d5020" strokeWidth={1} strokeDasharray="4 3" />
+        )}
+
+        {/* Release-week vertical markers + rotated multi-line labels */}
+        {Object.entries(releaseWeeks).map(([weekDate, entries]) => {
+          const i = dates.indexOf(weekDate);
+          if (i < 0) return null;
           const lx = x(i);
           const ly = axisY + 5;
+          const isPast = entries.some((e) => e.past);
           return (
-            <g key={"rel" + i}>
-              <line x1={lx} x2={lx} y1={PAD.t} y2={axisY} stroke="#4a3f5c" strokeWidth={1} strokeDasharray="2 3" />
+            <g key={"rel" + weekDate}>
+              <line x1={lx} x2={lx} y1={PAD.t} y2={axisY}
+                stroke={isPast ? "#4a3f5c" : "#332b40"}
+                strokeWidth={1} strokeDasharray="2 3" />
               <text
                 x={lx} y={ly}
-                textAnchor="end" fontSize={9.5} fill="#c4b5a5"
+                textAnchor="end" fontSize={9.5}
+                fill={isPast ? "#c4b5a5" : "#6b5e7a"}
                 transform={`rotate(-50, ${lx}, ${ly})`}
               >
-                {label}
+                {entries.map((e, ti) => (
+                  <tspan key={ti} x={lx} dy={ti === 0 ? 0 : 13}>
+                    {e.title.length > 22 ? e.title.slice(0, 20) + "…" : e.title}
+                  </tspan>
+                ))}
               </text>
             </g>
           );
         })}
 
-        {/* Hover line + dots */}
+        {/* Hover indicator */}
         {hoverIdx != null && (
           <>
             <line x1={x(hoverIdx)} x2={x(hoverIdx)} y1={PAD.t} y2={axisY}
               stroke="rgba(255,255,255,0.2)" strokeWidth={1} />
-            {series.map((s, si) => (
-              <circle key={si}
-                cx={x(hoverIdx)} cy={y(s.points[hoverIdx])}
-                r={4} fill={COLORS[si % COLORS.length]} stroke="#1e1822" strokeWidth={1.5}
-              />
-            ))}
+            {series.map((s, si) => {
+              const v = s.points[hoverIdx];
+              if (v == null) return null;
+              return (
+                <circle key={si} cx={x(hoverIdx)} cy={y(v)}
+                  r={4} fill={COLORS[si % COLORS.length]} stroke="#1e1822" strokeWidth={1.5} />
+              );
+            })}
           </>
         )}
 
-        {/* Transparent overlay captures mouse events over chart area */}
+        {/* Transparent overlay for mouse tracking */}
         <rect x={PAD.l} y={PAD.t} width={VW - PAD.l - PAD.r} height={axisY - PAD.t} fill="transparent" />
       </svg>
 
@@ -124,7 +147,7 @@ export default function ProfitChart({ dates, series, movies = [], revenues = {} 
         ))}
       </div>
 
-      {/* Hover tooltip — pinned top-right so it never clips off-screen */}
+      {/* Hover tooltip — weekly delta breakdown */}
       {tooltip && (
         <div style={{
           position: "absolute", top: 24, right: 24,
@@ -133,19 +156,22 @@ export default function ProfitChart({ dates, series, movies = [], revenues = {} 
           pointerEvents: "none", minWidth: 220, maxWidth: 320, zIndex: 10,
         }}>
           <div style={{ fontWeight: 600, marginBottom: 8, color: "#c4b5a5", fontSize: 11 }}>
-            {fmtDate(tooltip.date)}
+            Week of {fmtDate(tooltip.date)}
           </div>
           {tooltip.users.map((u) => (
             <div key={u.username} style={{ marginBottom: 8 }}>
               <div style={{ color: u.color, fontWeight: 600, marginBottom: 3 }}>
-                {u.username}: {fmt(u.total)}
+                {u.username}
+                <span style={{ color: "#6b5e7a", fontWeight: 400 }}> · {fmt(u.cumulative)} total</span>
               </div>
-              {u.movies.length === 0
-                ? <div style={{ color: "#6b5e7a", paddingLeft: 8 }}>No released movies yet</div>
-                : u.movies.map((m) => (
+              {u.weeklyMovies.length === 0
+                ? <div style={{ color: "#6b5e7a", paddingLeft: 8 }}>No change this week</div>
+                : u.weeklyMovies.map((m) => (
                   <div key={m.tmdb_id} style={{ color: "#a49784", paddingLeft: 8, lineHeight: 1.7 }}>
                     {m.title}:{" "}
-                    <span style={{ color: m.profit >= 0 ? "#34d399" : "#f87171" }}>{fmt(m.profit)}</span>
+                    <span style={{ color: m.delta >= 0 ? "#34d399" : "#f87171" }}>
+                      {m.delta >= 0 ? "+" : ""}{fmt(m.delta)}
+                    </span>
                   </div>
                 ))
               }
@@ -157,14 +183,29 @@ export default function ProfitChart({ dates, series, movies = [], revenues = {} 
   );
 }
 
-function computeLayout(dates, series) {
+// Weighted X-axis: weeks containing movie releases get proportionally more
+// horizontal space so adjacent labels don't overlap.
+function computeLayout(dates, series, releaseWeeks) {
   const n = dates?.length || 0;
   const innerW = VW - PAD.l - PAD.r;
   const innerH = VH - PAD.t - PAD.b;
 
+  // Gap weights: n-1 gaps between n points.
+  const gapW = new Array(Math.max(0, n - 1)).fill(1);
+  for (let i = 0; i < gapW.length; i++) {
+    const a = (releaseWeeks?.[dates[i]] || []).length;
+    const b = (releaseWeeks?.[dates[i + 1]] || []).length;
+    gapW[i] = 1 + Math.max(a, b) * 0.5;
+  }
+  const totalGap = gapW.reduce((s, w) => s + w, 0) || 1;
+  const cum = [0];
+  for (let i = 0; i < gapW.length; i++) cum.push(cum[i] + gapW[i]);
+  const x = (i) => PAD.l + (cum[i] / totalGap) * innerW;
+
   let yMin = 0, yMax = 0;
   for (const s of series || []) {
     for (const v of s.points || []) {
+      if (v == null) continue;
       if (v < yMin) yMin = v;
       if (v > yMax) yMax = v;
     }
@@ -172,8 +213,6 @@ function computeLayout(dates, series) {
   if (yMin === yMax) { yMin -= 1; yMax += 1; }
   const padY = (yMax - yMin) * 0.08;
   yMin -= padY; yMax += padY;
-
-  const x = (i) => PAD.l + (i / Math.max(1, n - 1)) * innerW;
   const y = (v) => PAD.t + (1 - (v - yMin) / (yMax - yMin)) * innerH;
 
   const yTicks = Array.from({ length: 5 }, (_, i) => yMin + (yMax - yMin) * i / 4);
@@ -184,27 +223,39 @@ function computeLayout(dates, series) {
   return { x, y, yTicks };
 }
 
+// Weekly delta tooltip: shows change this week per movie, plus running cumulative.
 function buildTooltip(idx, dates, series, movies, revenues) {
   const date = dates[idx];
   const users = series.map((s, si) => {
     const released = movies.filter(
       (m) => m.owner_user_id === s.userId && m.release_date && m.release_date <= date
     );
-    const breakdown = released.map((m) => {
-      const rev = revenues[m.tmdb_id]?.[idx] ?? 0;
-      return { tmdb_id: m.tmdb_id, title: m.title, profit: rev - m.budget };
-    }).sort((a, b) => b.profit - a.profit);
-    return { username: s.username, color: COLORS[si % COLORS.length], total: s.points[idx], movies: breakdown };
-  }).sort((a, b) => b.total - a.total);
+    const weeklyMovies = released.map((m) => {
+      const revNow = revenues[m.tmdb_id]?.[idx] ?? null;
+      if (revNow == null) return null;
+      const revPrev = idx > 0 ? (revenues[m.tmdb_id]?.[idx - 1] ?? null) : null;
+      // First week of data for this movie: delta includes budget hit.
+      // Subsequent weeks: delta is pure revenue change.
+      const delta = revPrev != null ? revNow - revPrev : revNow - m.budget;
+      return Math.abs(delta) >= 1000 ? { tmdb_id: m.tmdb_id, title: m.title, delta } : null;
+    }).filter(Boolean).sort((a, b) => b.delta - a.delta);
+
+    return {
+      username: s.username,
+      color: COLORS[si % COLORS.length],
+      cumulative: s.points[idx] ?? 0,
+      weeklyMovies,
+    };
+  }).sort((a, b) => b.cumulative - a.cumulative);
   return { date, users };
 }
 
 function fmtDate(iso) {
   if (!iso) return "";
-  const [, y, mo, d] = iso.match(/^(\d{4})-(\d{2})-(\d{2})/) || [];
-  if (!y) return iso;
+  const [, yr, mo, d] = iso.match(/^(\d{4})-(\d{2})-(\d{2})/) || [];
+  if (!yr) return iso;
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  return `${months[+mo - 1]} ${+d}, ${y}`;
+  return `${months[+mo - 1]} ${+d}, ${yr}`;
 }
 
 function fmt(n) {

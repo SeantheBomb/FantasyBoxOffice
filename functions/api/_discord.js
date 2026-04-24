@@ -59,17 +59,13 @@ function formatMovieLine(m) {
 // Chart.js config for the weekly profit chart. Dark-friendly but exported
 // over a white background so it reads in Discord's light and dark themes.
 export function buildChartConfig(history) {
-  const { dates = [], series = [], movies = [] } = history || {};
-  // Show movie title at release dates; blank everywhere else to reduce clutter.
-  const releasesByDate = {};
-  for (const m of movies) {
-    if (m.release_date) {
-      (releasesByDate[m.release_date] = releasesByDate[m.release_date] || []).push(
-        m.title.length > 18 ? m.title.slice(0, 16) + "…" : m.title
-      );
-    }
-  }
-  const labels = dates.map((d) => releasesByDate[d] ? releasesByDate[d].join(" / ") : "");
+  const { dates = [], series = [], releaseWeeks = {} } = history || {};
+  // Show movie title at release-week sample dates; blank elsewhere.
+  const labels = dates.map((d) => {
+    const entries = releaseWeeks[d];
+    if (!entries?.length) return "";
+    return entries.map((e) => (e.title.length > 16 ? e.title.slice(0, 14) + "…" : e.title)).join(" / ");
+  });
 
   return {
     type: "line",
