@@ -58,12 +58,14 @@ function formatMovieLine(m) {
 
 const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-// Chart.js config for the weekly profit chart. Dark-friendly but exported
-// over a white background so it reads in Discord's light and dark themes.
+// Chart.js config for the weekly profit chart. Returns a JavaScript object
+// literal STRING (not a plain JS object) so that QuickChart can eval the
+// ticks.callback function. QuickChart only evals callbacks when `chart` is
+// sent as a string — when it's a JSON object the functions are already parsed
+// as inert strings and never executed.
 //
-// Two-layer X-axis: the primary `x` scale shows movie titles at release weeks;
-// a secondary `months` scale (also at position "bottom", so it renders below)
-// shows month abbreviations at the first Sunday of each month.
+// Pure data (labels, datasets) is interpolated via JSON.stringify so special
+// characters are safe. The callback is written as a real JS function literal.
 export function buildChartConfig(history) {
   const { dates = [], series = [], releaseWeeks = {} } = history || {};
 
@@ -80,51 +82,53 @@ export function buildChartConfig(history) {
     return Number(parts[2]) <= 7 ? MONTH_ABBR[Number(parts[1]) - 1] : "";
   });
 
-  return {
-    type: "line",
+  const datasets = series.map((s, i) => ({
+    label: s.username,
+    data: s.points,
+    borderColor: PALETTE[i % PALETTE.length],
+    backgroundColor: "transparent",
+    borderWidth: 2.5,
+    pointRadius: 0,
+    tension: 0.1,
+  }));
+
+  return `{
+    type: 'line',
     data: {
-      labels: movieLabels,
-      datasets: series.map((s, i) => ({
-        label: s.username,
-        data: s.points,
-        borderColor: PALETTE[i % PALETTE.length],
-        backgroundColor: "transparent",
-        borderWidth: 2.5,
-        pointRadius: 0,
-        tension: 0.1,
-      })),
+      labels: ${JSON.stringify(movieLabels)},
+      datasets: ${JSON.stringify(datasets)}
     },
     options: {
       plugins: {
-        title: { display: true, text: "Total Profit", font: { size: 20 } },
-        legend: { position: "top" },
+        title: { display: true, text: 'Total Profit', font: { size: 20 } },
+        legend: { position: 'top' }
       },
       scales: {
-        // Primary x-axis: movie titles, rotated so they don't overlap.
-        x: {
-          ticks: { maxRotation: 65, minRotation: 65, autoSkip: false },
-        },
-        // Secondary x-axis: month labels, flat, drawn below the movie titles.
+        x: { ticks: { maxRotation: 65, minRotation: 65, autoSkip: false } },
         months: {
-          type: "category",
-          labels: monthLabels,
-          position: "bottom",
+          type: 'category',
+          labels: ${JSON.stringify(monthLabels)},
+          position: 'bottom',
           display: true,
           grid: { display: false, drawTicks: false },
-          ticks: { maxRotation: 0, minRotation: 0, autoSkip: false, font: { weight: "bold" } },
+          ticks: { maxRotation: 0, minRotation: 0, autoSkip: false, font: { weight: 'bold' } }
         },
-        // Y-axis: dollar-formatted values.
-        // QuickChart evals strings starting with "function" or "(" server-side.
         y: {
           display: true,
           ticks: {
             display: true,
-            callback: "(v) => { var a=Math.abs(v), p=v<0?'-$':'$'; if(a>=1e9) return p+(a/1e9).toFixed(1)+'B'; if(a>=1e6) return p+(a/1e6).toFixed(0)+'M'; if(a>=1e3) return p+(a/1e3).toFixed(0)+'K'; return p+a; }",
-          },
-        },
-      },
-    },
-  };
+            callback: function(v) {
+              var a = Math.abs(v), p = v < 0 ? '-$' : '$';
+              if (a >= 1e9) return p + (a / 1e9).toFixed(1) + 'B';
+              if (a >= 1e6) return p + (a / 1e6).toFixed(0) + 'M';
+              if (a >= 1e3) return p + (a / 1e3).toFixed(0) + 'K';
+              return p + a;
+            }
+          }
+        }
+      }
+    }
+  }`;
 }
 
 // POST the chart config to QuickChart, return PNG bytes. The `chart` field
