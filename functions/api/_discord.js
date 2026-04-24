@@ -30,7 +30,9 @@ export function buildStandingsMarkdown(standings) {
 
 function formatUserBlock(user, place) {
   const header = `# ${user.username} => Total Profit = ${formatShort(user.total_profit)} *(${ordinalPlace(place)} Place)*`;
-  const lines = (user.movies || []).map(formatMovieLine);
+  // Skip unreleased movies — they have no revenue yet and just clutter the recap.
+  const visible = (user.movies || []).filter((m) => m.status !== "unreleased");
+  const lines = visible.map(formatMovieLine);
   return [header, ...lines].join("\n");
 }
 
@@ -82,18 +84,23 @@ export function buildChartConfig(history) {
       },
       scales: {
         x: { ticks: { maxRotation: 60, minRotation: 60, autoSkip: true, maxTicksLimit: 20 } },
-        y: { ticks: { callback: "FORMAT_CURRENCY" } },
+        // QuickChart parses any string starting with "function" as JS server-side.
+        y: {
+          ticks: {
+            callback: "function(value){var a=Math.abs(value);var s=value<0?'-':'';if(a>=1e9)return s+'$'+(a/1e9).toFixed(1)+'B';if(a>=1e6)return s+'$'+(a/1e6).toFixed(0)+'M';if(a>=1e3)return s+'$'+(a/1e3).toFixed(0)+'K';return s+'$'+a;}",
+          },
+        },
       },
     },
   };
 }
 
-// POST the chart config to QuickChart, return PNG bytes.
-// QuickChart's /chart endpoint returns the PNG directly when the request
-// is a POST with JSON body — simpler than the two-step create+fetch flow.
+// POST the chart config to QuickChart, return PNG bytes. The `chart` field
+// must be a JSON object (not a stringified one) — QuickChart parses callbacks
+// out of any string property whose value begins with "function" or "()=>".
 export async function renderChartPng(config) {
   const body = {
-    chart: serializeChart(config),
+    chart: config,
     width: 1000,
     height: 520,
     backgroundColor: "white",
@@ -111,17 +118,6 @@ export async function renderChartPng(config) {
   }
   const buf = await res.arrayBuffer();
   return new Uint8Array(buf);
-}
-
-// QuickChart accepts JS-style config strings for callbacks — but we send
-// JSON, so replace the placeholder with a stringified function the service
-// evaluates server-side. QuickChart allows this when `version` is set.
-function serializeChart(config) {
-  const str = JSON.stringify(config);
-  return str.replace(
-    '"FORMAT_CURRENCY"',
-    "function(value) { if (Math.abs(value) >= 1e9) return '$' + (value/1e9).toFixed(1) + 'B'; if (Math.abs(value) >= 1e6) return '$' + (value/1e6).toFixed(0) + 'M'; if (Math.abs(value) >= 1e3) return '$' + (value/1e3).toFixed(0) + 'K'; return '$' + value; }"
-  );
 }
 
 // Post to a Discord webhook. `messages` is the array from
