@@ -56,15 +56,30 @@ function formatMovieLine(m) {
   return `* **${m.title}** => ${revenue} - ${budget} = ${profitStr}`;
 }
 
+const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
 // Chart.js config for the weekly profit chart. Dark-friendly but exported
 // over a white background so it reads in Discord's light and dark themes.
 export function buildChartConfig(history) {
   const { dates = [], series = [], releaseWeeks = {} } = history || {};
-  // Show movie title at release-week sample dates; blank elsewhere.
+
+  // Each label is a string or array-of-strings (Chart.js renders arrays as
+  // multi-line ticks). Show the 3-letter month at the first Sunday of each
+  // month (day ≤ 7) and show movie titles at release weeks.
   const labels = dates.map((d) => {
+    const parts = d.split("-").map(Number); // [YYYY, MM, DD]
+    const isFirstWeekOfMonth = parts[2] <= 7;
+    const monthLabel = isFirstWeekOfMonth ? MONTH_ABBR[parts[1] - 1] : null;
+
     const entries = releaseWeeks[d];
-    if (!entries?.length) return "";
-    return entries.map((e) => (e.title.length > 16 ? e.title.slice(0, 14) + "…" : e.title)).join(" / ");
+    const movieLabel = entries?.length
+      ? entries.map((e) => (e.title.length > 16 ? e.title.slice(0, 14) + "…" : e.title)).join(" / ")
+      : null;
+
+    if (monthLabel && movieLabel) return [monthLabel, movieLabel];
+    if (monthLabel) return monthLabel;
+    if (movieLabel) return movieLabel;
+    return "";
   });
 
   return {
@@ -90,6 +105,7 @@ export function buildChartConfig(history) {
         x: { ticks: { maxRotation: 65, minRotation: 65, autoSkip: false } },
         // QuickChart parses any string starting with "function" as JS server-side.
         y: {
+          display: true,
           ticks: {
             callback: "function(value){var a=Math.abs(value);var s=value<0?'-':'';if(a>=1e9)return s+'$'+(a/1e9).toFixed(1)+'B';if(a>=1e6)return s+'$'+(a/1e6).toFixed(0)+'M';if(a>=1e3)return s+'$'+(a/1e3).toFixed(0)+'K';return s+'$'+a;}",
           },
