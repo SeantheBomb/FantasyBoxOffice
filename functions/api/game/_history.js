@@ -1,9 +1,10 @@
 // Pure history/chart computation — shared by the Pages Function endpoint
 // and the Discord worker (chart generation). Returns
-//   { dates: [...], series: [{ userId, username, points: [...] }], season }
-// where each sample point is per-user cumulative profit (revenue - budget,
-// zero for unreleased or voided movies). Revenue flatlines between scrape
-// dates — we use the latest daily on or before each sample.
+//   { dates, series, movies, revenues, season }
+// where series[i].points[j] is per-user cumulative profit at dates[j],
+// movies is the list of owned in-season movies with owner/budget info,
+// and revenues[tmdbId][j] is domestic revenue for that movie at dates[j]
+// (null if not yet released at that date).
 
 export async function computeHistory(db, { season = "2026" } = {}) {
   const seasonStart = `${season}-01-01`;
@@ -12,7 +13,7 @@ export async function computeHistory(db, { season = "2026" } = {}) {
   const [users, movies, owned, dailies] = await Promise.all([
     db.prepare(`SELECT id, username FROM users WHERE in_league = 1 ORDER BY username`).all(),
     db.prepare(
-      `SELECT tmdb_id, budget, release_date
+      `SELECT tmdb_id, title, budget, release_date
          FROM movies
          WHERE release_date BETWEEN ? AND ?`
     ).bind(seasonStart, seasonEnd).all(),
@@ -29,9 +30,11 @@ export async function computeHistory(db, { season = "2026" } = {}) {
 
   const budgetByTmdb = new Map();
   const releaseByTmdb = new Map();
+  const titleByTmdb = new Map();
   for (const m of movies.results || []) {
     budgetByTmdb.set(m.tmdb_id, m.budget || 0);
     releaseByTmdb.set(m.tmdb_id, m.release_date);
+    titleByTmdb.set(m.tmdb_id, m.title);
   }
   const ownerByTmdb = new Map();
   for (const o of owned.results || []) ownerByTmdb.set(o.tmdb_id, o.owner_user_id);
@@ -87,5 +90,24 @@ export async function computeHistory(db, { season = "2026" } = {}) {
     for (let i = 0; i < series.length; i++) series[i].points.push(totals[i]);
   }
 
-  return { dates, series, season };
+  // Build per-movie metadata and revenue timeline for the client tooltip.
+  const moviesList = [];
+  const revenues = {};
+  for (const [tmdbId, ownerId] of ownerByTmdb.entries()) {
+    const release = releaseByTmdb.get(tmdbId);
+    if (!release) continue; // not an in-season movie
+    moviesList.push({
+      tmdb_id: tmdbId,
+      title: titleByTmdb.get(tmdbId) || "",
+      owner_user_id: ownerId,
+      release_date: release,
+      budget: budgetByTmdb.get(tmdbId) || 0,
+    });
+    revenues[tmdbId] = dates.map((date) => {
+      if (release > date) return null;
+      return revenueOnOrBefore(tmdbId, date);
+    });
+  }
+
+  return { dates, series, season, movies: moviesList, revenues };
 }

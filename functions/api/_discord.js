@@ -59,9 +59,17 @@ function formatMovieLine(m) {
 // Chart.js config for the weekly profit chart. Dark-friendly but exported
 // over a white background so it reads in Discord's light and dark themes.
 export function buildChartConfig(history) {
-  const { dates = [], series = [] } = history || {};
-  // Shorten labels — many release dates makes the axis unreadable.
-  const labels = dates.map((d) => d.slice(5)); // "MM-DD"
+  const { dates = [], series = [], movies = [] } = history || {};
+  // Show movie title at release dates; blank everywhere else to reduce clutter.
+  const releasesByDate = {};
+  for (const m of movies) {
+    if (m.release_date) {
+      (releasesByDate[m.release_date] = releasesByDate[m.release_date] || []).push(
+        m.title.length > 18 ? m.title.slice(0, 16) + "…" : m.title
+      );
+    }
+  }
+  const labels = dates.map((d) => releasesByDate[d] ? releasesByDate[d].join(" / ") : "");
 
   return {
     type: "line",
@@ -83,7 +91,7 @@ export function buildChartConfig(history) {
         legend: { position: "top" },
       },
       scales: {
-        x: { ticks: { maxRotation: 60, minRotation: 60, autoSkip: true, maxTicksLimit: 20 } },
+        x: { ticks: { maxRotation: 65, minRotation: 65, autoSkip: false } },
         // QuickChart parses any string starting with "function" as JS server-side.
         y: {
           ticks: {
