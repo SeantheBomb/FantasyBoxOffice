@@ -9,7 +9,7 @@
 
 export async function computeStandings(db) {
   const usersQ = db.prepare(
-    `SELECT id, username, real_name, points_remaining FROM users ORDER BY username`
+    `SELECT id, username, real_name, points_remaining FROM users WHERE in_league = 1 ORDER BY username`
   ).all();
 
   const latestDailyQ = db.prepare(

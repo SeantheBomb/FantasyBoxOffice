@@ -10,7 +10,7 @@ export async function computeHistory(db, { season = "2026" } = {}) {
   const seasonEnd = `${season}-12-31`;
 
   const [users, movies, owned, dailies] = await Promise.all([
-    db.prepare(`SELECT id, username FROM users ORDER BY username`).all(),
+    db.prepare(`SELECT id, username FROM users WHERE in_league = 1 ORDER BY username`).all(),
     db.prepare(
       `SELECT tmdb_id, budget, release_date
          FROM movies

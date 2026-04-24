@@ -83,6 +83,8 @@ export const apiAdminUpdateProfile = (userId, patch) =>
   jsonFetch(`/api/admin/users/${userId}/profile`, { method: "POST", body: patch });
 export const apiAdminResetPassword = (userId) =>
   jsonFetch(`/api/admin/users/${userId}/reset-password`, { method: "POST", body: {} });
+export const apiAdminSetInLeague = (userId, inLeague) =>
+  jsonFetch(`/api/admin/users/${userId}/league`, { method: "POST", body: { in_league: inLeague } });
 
 // Self-service
 export const apiUpdateMyProfile = (username) =>

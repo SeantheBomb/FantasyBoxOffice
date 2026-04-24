@@ -3,7 +3,7 @@ import {
   apiAdminUsers, apiAdminGrantPoints, apiAdminSetAdmin,
   apiAdminRefreshMovies, apiAdminRefreshDailies, apiAdminAddDaily,
   apiAdminBackfillBudgets, apiAdminImportTsv,
-  apiAdminUpdateProfile, apiAdminResetPassword,
+  apiAdminUpdateProfile, apiAdminResetPassword, apiAdminSetInLeague,
   apiAdminPostStandingsToDiscord,
   apiAuctions, apiAdminEditAuction, apiAdminDeleteAuction,
 } from "../api";
@@ -153,6 +153,13 @@ function UsersPanel() {
       r.data.temporary_password
     );
   }
+  async function toggleInLeague(u) {
+    const action = u.in_league ? "Remove from" : "Add to";
+    if (!window.confirm(`${action} league standings for ${u.username}?`)) return;
+    const r = await apiAdminSetInLeague(u.id, !u.in_league);
+    if (!r.ok) return alert(r.data?.error);
+    reload();
+  }
 
   return (
     <section style={card}>
@@ -167,6 +174,7 @@ function UsersPanel() {
               <th style={thRight}>Points</th>
               <th style={thRight}>Owned</th>
               <th style={th}>Admin</th>
+              <th style={th}>In League</th>
               <th></th>
             </tr>
           </thead>
@@ -179,11 +187,13 @@ function UsersPanel() {
                 <td style={tdRight}>{u.points_remaining}</td>
                 <td style={tdRight}>{u.owned_count}</td>
                 <td style={td}>{u.is_admin ? "yes" : "no"}</td>
+                <td style={td}>{u.in_league ? "yes" : "no"}</td>
                 <td style={td}>
                   <button onClick={() => grant(u.id)}>± points</button>{" "}
                   <button onClick={() => editUser(u)}>Edit</button>{" "}
                   <button onClick={() => resetPassword(u)}>Reset pw</button>{" "}
-                  <button onClick={() => toggleAdmin(u)}>{u.is_admin ? "Revoke admin" : "Make admin"}</button>
+                  <button onClick={() => toggleAdmin(u)}>{u.is_admin ? "Revoke admin" : "Make admin"}</button>{" "}
+                  <button onClick={() => toggleInLeague(u)}>{u.in_league ? "Remove from league" : "Add to league"}</button>
                 </td>
               </tr>
             ))}
