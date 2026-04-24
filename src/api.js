@@ -68,6 +68,8 @@ export const apiAdminRefreshMovies = (body = {}) =>
   jsonFetch("/api/admin/movies/refresh", { method: "POST", body });
 export const apiAdminRefreshDailies = () =>
   jsonFetch("/api/admin/dailies/refresh", { method: "POST", body: {} });
+export const apiAdminBackfillDailies = () =>
+  jsonFetch("/api/admin/dailies/backfill", { method: "POST", body: {} });
 export const apiAdminAddDaily = ({ tmdbId, date, domesticRevenue }) =>
   jsonFetch("/api/admin/dailies", {
     method: "POST",

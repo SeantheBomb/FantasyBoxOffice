@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   apiAdminUsers, apiAdminGrantPoints, apiAdminSetAdmin,
-  apiAdminRefreshMovies, apiAdminRefreshDailies, apiAdminAddDaily,
+  apiAdminRefreshMovies, apiAdminRefreshDailies, apiAdminBackfillDailies, apiAdminAddDaily,
   apiAdminBackfillBudgets, apiAdminImportTsv,
   apiAdminUpdateProfile, apiAdminResetPassword, apiAdminSetInLeague,
   apiAdminPostStandingsToDiscord,
@@ -44,6 +44,9 @@ function UpdatesPanel() {
         </button>
         <button disabled={!!busy} onClick={() => run("Dailies refresh", apiAdminRefreshDailies)}>
           {busy === "Dailies refresh" ? "Running..." : "Run Update Dailies"}
+        </button>
+        <button disabled={!!busy} onClick={() => run("Dailies backfill", apiAdminBackfillDailies)}>
+          {busy === "Dailies backfill" ? "Running..." : "Backfill Historical Dailies"}
         </button>
         <button disabled={!!busy} onClick={() => run("Backfill budgets", apiAdminBackfillBudgets)}>
           {busy === "Backfill budgets" ? "Running..." : "Backfill Budgets"}
