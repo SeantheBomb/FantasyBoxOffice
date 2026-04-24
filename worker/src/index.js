@@ -1,13 +1,15 @@
-// Fantasy Box Office cron worker. Runs three scheduled jobs:
+// Fantasy Box Office cron worker. Runs four scheduled jobs:
 //   0 9 * * *  — refresh TMDB movies (budget/poster/release)
 //   0 14 * * * — scrape Box Office Mojo dailies for released movies
 //   * * * * *  — settle expired auctions
+//   0 14 * * 1 — post the weekly standings recap to Discord (Mondays 9 AM ET)
 //
 // Shares logic with the Pages Functions in ../../functions/api via relative imports.
 
 import { refreshMovies, rollStatuses } from "../../functions/api/_tmdb.js";
 import { refreshDailies } from "../../functions/api/_boxoffice.js";
 import { settleExpiredAuctions } from "../../functions/api/_settlement.js";
+import { runStandingsPost } from "./standings-job.js";
 
 const SEASON_FROM = "2026-01-01";
 const SEASON_TO = "2026-12-31";
@@ -21,10 +23,12 @@ export default {
       ctx.waitUntil(runDailiesRefresh(env));
     } else if (cron === "* * * * *") {
       ctx.waitUntil(runSettleExpired(env));
+    } else if (cron === "0 14 * * 1") {
+      ctx.waitUntil(runStandingsPost(env));
     }
   },
 
-  // Manual trigger for local testing: POST /trigger?job=movies|dailies|settle
+  // Manual trigger for local testing: POST /trigger?job=movies|dailies|settle|standings
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname !== "/trigger") {
@@ -35,7 +39,8 @@ export default {
     if (job === "movies") result = await runMoviesRefresh(env);
     else if (job === "dailies") result = await runDailiesRefresh(env);
     else if (job === "settle") result = await runSettleExpired(env);
-    else return new Response("job must be movies|dailies|settle", { status: 400 });
+    else if (job === "standings") result = await runStandingsPost(env);
+    else return new Response("job must be movies|dailies|settle|standings", { status: 400 });
     return new Response(JSON.stringify(result), {
       headers: { "Content-Type": "application/json" },
     });

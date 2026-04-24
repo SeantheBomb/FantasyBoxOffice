@@ -4,6 +4,7 @@ import {
   apiAdminRefreshMovies, apiAdminRefreshDailies, apiAdminAddDaily,
   apiAdminBackfillBudgets, apiAdminImportTsv,
   apiAdminUpdateProfile, apiAdminResetPassword,
+  apiAdminPostStandingsToDiscord,
   apiAuctions, apiAdminEditAuction, apiAdminDeleteAuction,
 } from "../api";
 import { useUser } from "../useUser";
@@ -46,6 +47,9 @@ function UpdatesPanel() {
         </button>
         <button disabled={!!busy} onClick={() => run("Backfill budgets", apiAdminBackfillBudgets)}>
           {busy === "Backfill budgets" ? "Running..." : "Backfill Budgets"}
+        </button>
+        <button disabled={!!busy} onClick={() => run("Discord standings post", apiAdminPostStandingsToDiscord)}>
+          {busy === "Discord standings post" ? "Posting..." : "Post Standings to Discord"}
         </button>
       </div>
       {log.length > 0 && (

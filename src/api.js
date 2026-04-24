@@ -77,6 +77,8 @@ export const apiAdminBackfillBudgets = (body = {}) =>
   jsonFetch("/api/admin/movies/backfill-budgets", { method: "POST", body });
 export const apiAdminImportTsv = (tsv) =>
   jsonFetch("/api/admin/import/tsv", { method: "POST", body: { tsv } });
+export const apiAdminPostStandingsToDiscord = () =>
+  jsonFetch("/api/admin/discord/test-post", { method: "POST", body: {} });
 export const apiAdminUpdateProfile = (userId, patch) =>
   jsonFetch(`/api/admin/users/${userId}/profile`, { method: "POST", body: patch });
 export const apiAdminResetPassword = (userId) =>
