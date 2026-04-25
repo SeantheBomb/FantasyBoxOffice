@@ -1,0 +1,251 @@
+/* Fantasy Box Office — theater marquee aesthetic.
+   Dark plush backdrop, gold accents, a hint of red curtain.
+   Kept subtle so that dense data tables remain readable. */
+
+:root {
+  --fbo-bg: #141018;
+  --fbo-bg-panel: #1e1822;
+  --fbo-bg-card: #25202b;
+  --fbo-border: #352d3e;
+  --fbo-gold: #f5d27a;
+  --fbo-gold-soft: #e8c66a;
+  --fbo-red: #8f1c2a;
+  --fbo-red-soft: #b94050;
+  --fbo-text: #f2ead8;
+  --fbo-text-muted: #a49784;
+  --fbo-success: #63d37a;
+  --fbo-danger: #ff6b6b;
+}
+
+body, html, #root {
+  margin: 0;
+  background: var(--fbo-bg);
+  color: var(--fbo-text);
+  font-family: "Palatino", "Palatino Linotype", "Georgia", serif;
+}
+
+* { box-sizing: border-box; }
+
+.fbo-app {
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse at top, rgba(143, 28, 42, 0.18) 0%, transparent 60%),
+    linear-gradient(180deg, #1a141e 0%, #141018 100%);
+  color: var(--fbo-text);
+}
+
+/* Marquee header */
+.fbo-header {
+  background:
+    repeating-linear-gradient(90deg, #2a0c12 0 14px, #3a1018 14px 28px);
+  border-bottom: 3px double var(--fbo-gold);
+  padding: 10px 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+}
+
+.fbo-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--fbo-gold);
+  margin-right: 20px;
+  line-height: 1;
+}
+.fbo-brand-icon { font-size: 26px; }
+.fbo-brand-text {
+  display: flex;
+  flex-direction: column;
+  font-family: "Georgia", serif;
+  letter-spacing: 0.08em;
+}
+.fbo-brand-line1 {
+  font-size: 11px;
+  color: var(--fbo-red-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+}
+.fbo-brand-line2 {
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--fbo-gold);
+  text-shadow: 0 0 6px rgba(245, 210, 122, 0.4);
+}
+
+.fbo-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.fbo-usermenu {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.fbo-userbadge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fbo-text);
+}
+.fbo-ticket {
+  background: var(--fbo-gold);
+  color: #1a0000;
+  padding: 3px 8px;
+  border-radius: 3px;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.fbo-main {
+  padding: 32px 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.fbo-footer {
+  padding: 20px 24px;
+  text-align: center;
+  color: var(--fbo-text-muted);
+  font-size: 13px;
+  border-top: 1px solid var(--fbo-border);
+  background: rgba(0,0,0,0.2);
+}
+
+/* Typography */
+h1, h2, h3 {
+  color: var(--fbo-gold);
+  font-family: "Georgia", serif;
+  letter-spacing: 0.02em;
+}
+h1 { font-size: 32px; margin-top: 0; }
+h1::after {
+  content: "";
+  display: block;
+  width: 60px;
+  height: 3px;
+  background: var(--fbo-red-soft);
+  margin-top: 6px;
+}
+h3 { color: var(--fbo-gold-soft); }
+
+a { color: var(--fbo-gold-soft); }
+a:hover { color: var(--fbo-gold); }
+
+/* Cards / sections default look — existing inline `background: white` gets
+   overridden where it conflicts. Pages that set their own styles keep working. */
+table {
+  color: var(--fbo-text);
+}
+table thead tr {
+  color: var(--fbo-text-muted) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+table tbody tr { border-top-color: rgba(255,255,255,0.05) !important; }
+
+/* Override the white panels from earlier inline styles */
+section[style*="background: white"],
+div[style*="background: white"],
+table[style*="background: white"],
+table[style*="background:white"] {
+  background: var(--fbo-bg-card) !important;
+  border-color: var(--fbo-border) !important;
+}
+
+/* Light-gray header rows from earlier inline styles */
+tr[style*="background: #fafafa"],
+tr[style*="background:#fafafa"] {
+  background: rgba(255,255,255,0.04) !important;
+}
+
+/* Light-gray text commonly used for muted labels / empty states */
+[style*="color: #666"],
+[style*="color:#666"],
+[style*="color: #888"],
+[style*="color:#888"],
+[style*="color: #999"],
+[style*="color:#999"],
+[style*="color: #bbb"],
+[style*="color:#bbb"] {
+  color: var(--fbo-text-muted) !important;
+}
+
+/* Near-white borders get pulled into the theme */
+[style*="1px solid #eee"],
+[style*="1px solid #f0f0f0"] {
+  border-color: var(--fbo-border) !important;
+}
+
+/* Empty-poster placeholders were light gray; blend into cards */
+div[style*="background: #f0f0f0"] {
+  background: #2a2330 !important;
+  color: #5d4d6a !important;
+}
+
+/* Inline pre blocks (e.g. admin response panel) */
+pre[style*="background: #fafafa"] {
+  background: #0f0c12 !important;
+  color: var(--fbo-text) !important;
+}
+
+input, select, textarea, button {
+  font-family: inherit;
+  color: var(--fbo-text);
+  background: #2a2330;
+  border: 1px solid var(--fbo-border);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 14px;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--fbo-gold-soft);
+  box-shadow: 0 0 0 2px rgba(245, 210, 122, 0.2);
+}
+button {
+  background: linear-gradient(180deg, var(--fbo-gold) 0%, var(--fbo-gold-soft) 100%);
+  color: #1a0000;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border: 1px solid #b58d37;
+  cursor: pointer;
+  text-transform: uppercase;
+  font-size: 13px;
+}
+button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+pre {
+  background: #0f0c12 !important;
+  color: var(--fbo-text) !important;
+  border: 1px solid var(--fbo-border);
+}
+
+/* Links that sit on light cards (very few left) */
+table a { color: var(--fbo-gold-soft); }
+
+/* Responsive */
+@media (max-width: 700px) {
+  .fbo-header { flex-wrap: wrap; padding: 8px 14px; }
+  .fbo-nav { order: 3; width: 100%; }
+  .fbo-usermenu { font-size: 12px; gap: 6px; }
+  .fbo-main { padding: 16px 12px; }
+  h1 { font-size: 24px; }
+  /* Comfortable touch targets */
+  button, input, select, textarea { min-height: 40px; }
+  /* Let narrow table wrappers scroll rather than squish content */
+  .fbo-scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}

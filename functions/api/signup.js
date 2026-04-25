@@ -20,8 +20,11 @@ export async function onRequestPost({ request, env }) {
     )
       .bind(userId, email.toLowerCase(), username, realName, hashB64, saltB64, now)
       .run();
-  } catch {
-    return json({ error: "Email or username already exists" }, { status: 409 });
+  } catch (e) {
+    const msg = e?.message || "";
+    if (msg.includes("UNIQUE") || msg.includes("unique"))
+      return json({ error: "Email or username already exists" }, { status: 409 });
+    throw e;
   }
 
   const sessionId = crypto.randomUUID();
