@@ -28,9 +28,9 @@ export default function MovieDetail() {
     <div style={{ maxWidth: 720 }}>
       <Link to="/catalog">← Catalog</Link>
       <h1>{movie.title}</h1>
-      <div style={{ display: "flex", gap: 16 }}>
-        {movie.poster_url && <img src={movie.poster_url} alt="" style={{ width: 200, borderRadius: 6 }} />}
-        <div>
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+        {movie.poster_url && <img src={movie.poster_url} alt="" style={{ width: "min(200px, 40%)", borderRadius: 6, flexShrink: 0 }} />}
+        <div style={{ flex: 1, minWidth: 180 }}>
           <div>Release: <b>{movie.release_date}</b></div>
           <div>Status: {movie.status}</div>
           <div>Budget: {fullCurrency(movie.budget)}</div>
@@ -55,24 +55,26 @@ export default function MovieDetail() {
       {dailies.length === 0 ? (
         <div style={{ color: "#888" }}>No dailies yet.</div>
       ) : (
-        <table style={{ width: "100%", background: "white", border: "1px solid #eee", borderRadius: 8, borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ textAlign: "left", color: "#666", background: "#fafafa" }}>
-              <th style={{ padding: 8 }}>Date</th>
-              <th style={{ textAlign: "right" }}>Cumulative domestic</th>
-              <th>Source</th>
-            </tr>
-          </thead>
-          <tbody>
-            {dailies.slice().reverse().map((d) => (
-              <tr key={d.date} style={{ borderTop: "1px solid #f0f0f0" }}>
-                <td style={{ padding: 8 }}>{d.date}</td>
-                <td style={{ textAlign: "right" }}>{fullCurrency(d.domestic_revenue)}</td>
-                <td>{d.source}</td>
+        <div className="fbo-scroll-x">
+          <table style={{ width: "100%", background: "white", border: "1px solid #eee", borderRadius: 8, borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ textAlign: "left", color: "#666", background: "#fafafa" }}>
+                <th style={{ padding: 8 }}>Date</th>
+                <th style={{ textAlign: "right", padding: 8, whiteSpace: "nowrap" }}>Cumulative domestic</th>
+                <th style={{ padding: 8 }}>Source</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {dailies.slice().reverse().map((d) => (
+                <tr key={d.date} style={{ borderTop: "1px solid #f0f0f0" }}>
+                  <td style={{ padding: 8 }}>{d.date}</td>
+                  <td style={{ textAlign: "right", padding: 8, whiteSpace: "nowrap" }}>{fullCurrency(d.domestic_revenue)}</td>
+                  <td style={{ padding: 8 }}>{d.source}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

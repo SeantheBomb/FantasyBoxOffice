@@ -68,9 +68,9 @@ export default function AuctionDetail() {
     <div style={{ maxWidth: 720 }}>
       <Link to="/auctions">← All auctions</Link>
       <h1 style={{ marginTop: 8 }}>{a.title}</h1>
-      <div style={{ display: "flex", gap: 16 }}>
-        {a.poster_url && <img src={a.poster_url} alt="" style={{ width: 160, borderRadius: 6 }} />}
-        <div>
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+        {a.poster_url && <img src={a.poster_url} alt="" style={{ width: "min(160px, 40%)", borderRadius: 6, flexShrink: 0 }} />}
+        <div style={{ flex: 1, minWidth: 180 }}>
           <div>Releases <b>{a.release_date}</b></div>
           <div>Budget: {fullCurrency(a.budget)}</div>
           <div style={{ marginTop: 8 }}>
@@ -126,24 +126,26 @@ export default function AuctionDetail() {
       {err && <div style={{ color: "crimson", marginTop: 8 }}>{err}</div>}
 
       <h3 style={{ marginTop: 24 }}>Bid history</h3>
-      <table style={{ width: "100%", background: "white", border: "1px solid #eee", borderRadius: 8, borderCollapse: "collapse" }}>
-        <thead>
-          <tr style={{ textAlign: "left", color: "#666", background: "#fafafa" }}>
-            <th style={{ padding: 8 }}>User</th>
-            <th style={{ textAlign: "right" }}>Amount</th>
-            <th style={{ padding: 8 }}>Time</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.bids.map((b) => (
-            <tr key={b.id} style={{ borderTop: "1px solid #f0f0f0" }}>
-              <td style={{ padding: 8 }}>{b.username}</td>
-              <td style={{ textAlign: "right" }}>{b.amount}</td>
-              <td style={{ padding: 8 }}>{new Date(b.bid_at).toLocaleString()}</td>
+      <div className="fbo-scroll-x">
+        <table style={{ width: "100%", background: "white", border: "1px solid #eee", borderRadius: 8, borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ textAlign: "left", color: "#666", background: "#fafafa" }}>
+              <th style={{ padding: 8 }}>User</th>
+              <th style={{ textAlign: "right", padding: 8 }}>Amount</th>
+              <th style={{ padding: 8, whiteSpace: "nowrap" }}>Time</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data.bids.map((b) => (
+              <tr key={b.id} style={{ borderTop: "1px solid #f0f0f0" }}>
+                <td style={{ padding: 8 }}>{b.username}</td>
+                <td style={{ textAlign: "right", padding: 8 }}>{b.amount}</td>
+                <td style={{ padding: 8, whiteSpace: "nowrap" }}>{new Date(b.bid_at).toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

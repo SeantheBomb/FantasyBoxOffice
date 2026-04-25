@@ -218,7 +218,7 @@ button {
   border: 1px solid #b58d37;
   cursor: pointer;
   text-transform: uppercase;
-  font-size: 12px;
+  font-size: 13px;
 }
 button:hover:not(:disabled) {
   filter: brightness(1.08);
@@ -239,6 +239,13 @@ table a { color: var(--fbo-gold-soft); }
 
 /* Responsive */
 @media (max-width: 700px) {
-  .fbo-header { flex-wrap: wrap; }
+  .fbo-header { flex-wrap: wrap; padding: 8px 14px; }
   .fbo-nav { order: 3; width: 100%; }
+  .fbo-usermenu { font-size: 12px; gap: 6px; }
+  .fbo-main { padding: 16px 12px; }
+  h1 { font-size: 24px; }
+  /* Comfortable touch targets */
+  button, input, select, textarea { min-height: 40px; }
+  /* Let narrow table wrappers scroll rather than squish content */
+  .fbo-scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 }

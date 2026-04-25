@@ -44,41 +44,43 @@ export default function MyMovies() {
       {data.movies.length === 0 ? (
         <div style={{ color: "var(--fbo-text-muted)" }}>You don&apos;t own any movies yet. <Link to="/auctions">Go bid on some.</Link></div>
       ) : (
-        <table style={{ width: "100%", background: "var(--fbo-bg-card)", border: "1px solid var(--fbo-border)", borderRadius: 8, borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ textAlign: "left", color: "var(--fbo-text-muted)", background: "rgba(255,255,255,0.04)" }}>
-              <th style={{ padding: 8 }}>Movie</th>
-              <th>Release</th>
-              <th>Status</th>
-              <th style={{ textAlign: "right" }}>Paid</th>
-              <th style={{ textAlign: "right" }}>Revenue</th>
-              <th style={{ textAlign: "right" }}>Budget</th>
-              <th style={{ textAlign: "right" }}>Profit</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.movies.map((m) => (
-              <tr key={m.tmdb_id} style={{ borderTop: "1px solid var(--fbo-border)", opacity: m.is_void ? 0.5 : 1 }}>
-                <td style={{ padding: 8 }}>
-                  <Link to={`/movie/${m.tmdb_id}`}>{m.title}</Link>
-                  {m.is_void && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--fbo-danger)" }}>VOID</span>}
-                </td>
-                <td>{m.release_date}</td>
-                <td>{m.status}</td>
-                <td style={{ textAlign: "right" }}>{m.purchase_price} pts</td>
-                <td style={{ textAlign: "right" }}>{fullCurrency(m.revenue)}</td>
-                <td style={{ textAlign: "right" }}>{fullCurrency(m.budget)}</td>
-                <td style={{ textAlign: "right", color: profitColor(m.profit) }}>{fullCurrency(m.profit)}</td>
-                <td>
-                  {!m.is_void && (
-                    <button onClick={() => voidMovie(m)}>Void ({m.void_cost} pts)</button>
-                  )}
-                </td>
+        <div className="fbo-scroll-x">
+          <table style={{ width: "100%", background: "var(--fbo-bg-card)", border: "1px solid var(--fbo-border)", borderRadius: 8, borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ textAlign: "left", color: "var(--fbo-text-muted)", background: "rgba(255,255,255,0.04)" }}>
+                <th style={{ padding: 8 }}>Movie</th>
+                <th style={{ whiteSpace: "nowrap", padding: 8 }}>Release</th>
+                <th style={{ padding: 8 }}>Status</th>
+                <th style={{ textAlign: "right", padding: 8, whiteSpace: "nowrap" }}>Paid</th>
+                <th style={{ textAlign: "right", padding: 8 }}>Revenue</th>
+                <th style={{ textAlign: "right", padding: 8 }}>Budget</th>
+                <th style={{ textAlign: "right", padding: 8 }}>Profit</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {data.movies.map((m) => (
+                <tr key={m.tmdb_id} style={{ borderTop: "1px solid var(--fbo-border)", opacity: m.is_void ? 0.5 : 1 }}>
+                  <td style={{ padding: 8, whiteSpace: "nowrap" }}>
+                    <Link to={`/movie/${m.tmdb_id}`}>{m.title}</Link>
+                    {m.is_void && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--fbo-danger)" }}>VOID</span>}
+                  </td>
+                  <td style={{ padding: 8, whiteSpace: "nowrap" }}>{m.release_date}</td>
+                  <td style={{ padding: 8 }}>{m.status}</td>
+                  <td style={{ textAlign: "right", padding: 8, whiteSpace: "nowrap" }}>{m.purchase_price} pts</td>
+                  <td style={{ textAlign: "right", padding: 8, whiteSpace: "nowrap" }}>{fullCurrency(m.revenue)}</td>
+                  <td style={{ textAlign: "right", padding: 8, whiteSpace: "nowrap" }}>{fullCurrency(m.budget)}</td>
+                  <td style={{ textAlign: "right", padding: 8, whiteSpace: "nowrap", color: profitColor(m.profit) }}>{fullCurrency(m.profit)}</td>
+                  <td style={{ padding: 8 }}>
+                    {!m.is_void && (
+                      <button onClick={() => voidMovie(m)} style={{ whiteSpace: "nowrap" }}>Void ({m.void_cost} pts)</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

@@ -66,9 +66,10 @@ export default function Catalog() {
           placeholder="Search title"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          style={{ flex: 1, minWidth: 200 }}
+          style={{ flex: 1, minWidth: 120 }}
         />
       </div>
+      <div className="fbo-scroll-x">
       <table style={{ width: "100%", background: "var(--fbo-bg-card)", border: "1px solid var(--fbo-border)", borderRadius: 8, borderCollapse: "collapse" }}>
         <thead>
           <tr style={{ textAlign: "left", color: "var(--fbo-text-muted)", background: "rgba(255,255,255,0.04)" }}>
@@ -107,6 +108,7 @@ export default function Catalog() {
           ))}
         </tbody>
       </table>
+      </div>
       {filtered.length === 0 && <div style={{ padding: 16, color: "#888" }}>No movies match.</div>}
     </div>
   );

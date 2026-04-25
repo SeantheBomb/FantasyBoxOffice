@@ -168,40 +168,42 @@ function UsersPanel() {
     <section style={card}>
       <h3>Users</h3>
       {!users ? <div>Loading...</div> : (
-        <table style={tbl}>
-          <thead>
-            <tr style={thRow}>
-              <th style={th}>Username</th>
-              <th style={th}>Real name</th>
-              <th style={th}>Email</th>
-              <th style={thRight}>Points</th>
-              <th style={thRight}>Owned</th>
-              <th style={th}>Admin</th>
-              <th style={th}>In League</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id} style={{ borderTop: "1px solid #f0f0f0" }}>
-                <td style={td}>{u.username}</td>
-                <td style={td}>{u.real_name}</td>
-                <td style={td}>{u.email}</td>
-                <td style={tdRight}>{u.points_remaining}</td>
-                <td style={tdRight}>{u.owned_count}</td>
-                <td style={td}>{u.is_admin ? "yes" : "no"}</td>
-                <td style={td}>{u.in_league ? "yes" : "no"}</td>
-                <td style={td}>
-                  <button onClick={() => grant(u.id)}>± points</button>{" "}
-                  <button onClick={() => editUser(u)}>Edit</button>{" "}
-                  <button onClick={() => resetPassword(u)}>Reset pw</button>{" "}
-                  <button onClick={() => toggleAdmin(u)}>{u.is_admin ? "Revoke admin" : "Make admin"}</button>{" "}
-                  <button onClick={() => toggleInLeague(u)}>{u.in_league ? "Remove from league" : "Add to league"}</button>
-                </td>
+        <div className="fbo-scroll-x">
+          <table style={tbl}>
+            <thead>
+              <tr style={thRow}>
+                <th style={th}>Username</th>
+                <th style={th}>Real name</th>
+                <th style={th}>Email</th>
+                <th style={thRight}>Points</th>
+                <th style={thRight}>Owned</th>
+                <th style={th}>Admin</th>
+                <th style={th}>In League</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id} style={{ borderTop: "1px solid #f0f0f0" }}>
+                  <td style={td}>{u.username}</td>
+                  <td style={td}>{u.real_name}</td>
+                  <td style={td}>{u.email}</td>
+                  <td style={tdRight}>{u.points_remaining}</td>
+                  <td style={tdRight}>{u.owned_count}</td>
+                  <td style={td}>{u.is_admin ? "yes" : "no"}</td>
+                  <td style={td}>{u.in_league ? "yes" : "no"}</td>
+                  <td style={{ ...td, whiteSpace: "nowrap" }}>
+                    <button onClick={() => grant(u.id)}>± points</button>{" "}
+                    <button onClick={() => editUser(u)}>Edit</button>{" "}
+                    <button onClick={() => resetPassword(u)}>Reset pw</button>{" "}
+                    <button onClick={() => toggleAdmin(u)}>{u.is_admin ? "Revoke admin" : "Make admin"}</button>{" "}
+                    <button onClick={() => toggleInLeague(u)}>{u.in_league ? "Remove from league" : "Add to league"}</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );
@@ -241,33 +243,35 @@ function AuctionsPanel() {
     <section style={card}>
       <h3>Auctions</h3>
       {!auctions ? <div>Loading...</div> : (
-        <table style={tbl}>
-          <thead>
-            <tr style={thRow}>
-              <th style={th}>Movie</th>
-              <th style={th}>Status</th>
-              <th style={thRight}>Bid</th>
-              <th style={th}>Bidder</th>
-              <th style={th}>Ends</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {auctions.map((a) => (
-              <tr key={a.id} style={{ borderTop: "1px solid #f0f0f0" }}>
-                <td style={td}>{a.title}</td>
-                <td style={td}>{a.status}</td>
-                <td style={tdRight}>{a.current_bid}</td>
-                <td style={td}>{a.current_bidder_username}</td>
-                <td style={td}>{a.ends_at}</td>
-                <td style={td}>
-                  <button onClick={() => edit(a)}>Edit</button>{" "}
-                  <button onClick={() => del(a)}>Delete</button>
-                </td>
+        <div className="fbo-scroll-x">
+          <table style={tbl}>
+            <thead>
+              <tr style={thRow}>
+                <th style={th}>Movie</th>
+                <th style={th}>Status</th>
+                <th style={thRight}>Bid</th>
+                <th style={th}>Bidder</th>
+                <th style={{ ...th, whiteSpace: "nowrap" }}>Ends</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {auctions.map((a) => (
+                <tr key={a.id} style={{ borderTop: "1px solid #f0f0f0" }}>
+                  <td style={td}>{a.title}</td>
+                  <td style={td}>{a.status}</td>
+                  <td style={tdRight}>{a.current_bid}</td>
+                  <td style={td}>{a.current_bidder_username}</td>
+                  <td style={{ ...td, whiteSpace: "nowrap" }}>{a.ends_at}</td>
+                  <td style={{ ...td, whiteSpace: "nowrap" }}>
+                    <button onClick={() => edit(a)}>Edit</button>{" "}
+                    <button onClick={() => del(a)}>Delete</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );
@@ -294,9 +298,9 @@ function ManualDailyPanel() {
     <section style={card}>
       <h3>Manual daily revenue</h3>
       <form onSubmit={submit} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <input placeholder="TMDB id" value={tmdbId} onChange={(e) => setTmdbId(e.target.value)} style={{ width: 110 }} />
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        <input placeholder="Cumulative $" value={rev} onChange={(e) => setRev(e.target.value)} style={{ width: 160 }} />
+        <input placeholder="TMDB id" value={tmdbId} onChange={(e) => setTmdbId(e.target.value)} style={{ width: "min(110px, 100%)" }} />
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ flex: "1 1 130px" }} />
+        <input placeholder="Cumulative $" value={rev} onChange={(e) => setRev(e.target.value)} style={{ flex: "1 1 130px" }} />
         <button type="submit">Save</button>
         {msg && <span style={{ color: "#666" }}>{msg}</span>}
       </form>
