@@ -1,8 +1,8 @@
 // Fantasy Box Office cron worker. Runs four scheduled jobs:
-//   0 9 * * *  — refresh TMDB movies (budget/poster/release)
-//   0 14 * * * — scrape Box Office Mojo dailies for released movies
-//   * * * * *  — settle expired auctions
-//   0 14 * * 1 — post the weekly standings recap to Discord (Mondays 9 AM ET)
+//   0 9 * * *    — refresh TMDB movies (budget/poster/release)
+//   0 14 * * *   — scrape Box Office Mojo dailies for released movies
+//   * * * * *    — settle expired auctions
+//   0 14 * * MON — post the weekly standings recap to Discord (10 AM EDT)
 //
 // Shares logic with the Pages Functions in ../../functions/api via relative imports.
 
@@ -23,7 +23,7 @@ export default {
       ctx.waitUntil(runDailiesRefresh(env));
     } else if (cron === "* * * * *") {
       ctx.waitUntil(runSettleExpired(env));
-    } else if (cron === "0 14 * * 1") {
+    } else if (cron === "0 14 * * MON") {
       ctx.waitUntil(runStandingsPost(env));
     }
   },

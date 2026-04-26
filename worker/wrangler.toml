@@ -14,6 +14,8 @@ database_id = "5cdc4ff3-adf8-4b63-a15a-9d9b8f125866"
 # Daily 09:00 UTC  → movies refresh
 # Daily 14:00 UTC  → dailies refresh
 # Every minute     → settle expired auctions
-# Monday 14:00 UTC → post weekly standings to Discord (9 AM ET / 6 AM PT)
+# Monday 14:00 UTC → post weekly standings to Discord (10 AM EDT / 9 AM EST).
+#   Use the named "MON" — Cloudflare's numeric day-of-week is 1=Sunday,
+#   not POSIX-style 1=Monday, which silently posts a day early.
 [triggers]
-crons = ["0 9 * * *", "0 14 * * *", "* * * * *", "0 14 * * 1"]
+crons = ["0 9 * * *", "0 14 * * *", "* * * * *", "0 14 * * MON"]
