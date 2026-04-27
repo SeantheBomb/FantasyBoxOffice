@@ -66,6 +66,8 @@ export const apiAdminDeleteAuction = (id) =>
   jsonFetch(`/api/admin/auctions/${id}`, { method: "DELETE" });
 export const apiAdminRefreshMovies = (body = {}) =>
   jsonFetch("/api/admin/movies/refresh", { method: "POST", body });
+export const apiAdminAddMovie = (tmdbId) =>
+  jsonFetch("/api/admin/movies/add", { method: "POST", body: { tmdb_id: tmdbId } });
 export const apiAdminRefreshDailies = () =>
   jsonFetch("/api/admin/dailies/refresh", { method: "POST", body: {} });
 export const apiAdminBackfillDailies = () =>

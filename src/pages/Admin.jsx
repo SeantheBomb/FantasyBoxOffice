@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   apiAdminUsers, apiAdminGrantPoints, apiAdminSetAdmin,
-  apiAdminRefreshMovies, apiAdminRefreshDailies, apiAdminBackfillDailies, apiAdminAddDaily,
+  apiAdminRefreshMovies, apiAdminAddMovie, apiAdminRefreshDailies, apiAdminBackfillDailies, apiAdminAddDaily,
   apiAdminBackfillBudgets, apiAdminImportTsv,
   apiAdminUpdateProfile, apiAdminResetPassword, apiAdminSetInLeague,
   apiAdminPostStandingsToDiscord,
@@ -18,11 +18,62 @@ export default function Admin() {
     <div>
       <h1>Admin</h1>
       <UpdatesPanel />
+      <AddMoviePanel />
       <ImportPanel />
       <UsersPanel />
       <AuctionsPanel />
       <ManualDailyPanel />
     </div>
+  );
+}
+
+function AddMoviePanel() {
+  const [tmdbId, setTmdbId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+
+  async function submit(e) {
+    e.preventDefault();
+    setResult(null);
+    const id = Number(tmdbId);
+    if (!Number.isInteger(id) || id <= 0) return setResult({ error: "Enter a numeric TMDB id" });
+    setBusy(true);
+    const r = await apiAdminAddMovie(id);
+    setBusy(false);
+    if (r.ok) {
+      setResult({ ok: true, movie: r.data.movie });
+      setTmdbId("");
+    } else {
+      setResult({ error: r.data?.error || `Failed (${r.status})` });
+    }
+  }
+
+  return (
+    <section style={card}>
+      <h3>Add movie by TMDB id</h3>
+      <p style={{ fontSize: 13, color: "#666", marginTop: 0 }}>
+        Escape hatch for titles that don't show up in the discover query
+        (foreign-only, festival pickups, etc.). Find the id in the TMDB
+        URL: <code>themoviedb.org/movie/<b>123456</b></code>.
+      </p>
+      <form onSubmit={submit} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <input
+          placeholder="TMDB id"
+          value={tmdbId}
+          onChange={(e) => setTmdbId(e.target.value)}
+          style={{ width: "min(160px, 100%)" }}
+        />
+        <button type="submit" disabled={busy || !tmdbId}>
+          {busy ? "Adding..." : "Add to catalog"}
+        </button>
+        {result?.ok && (
+          <span style={{ color: "var(--fbo-success)" }}>
+            Added: <b>{result.movie.title}</b> ({result.movie.release_date})
+          </span>
+        )}
+        {result?.error && <span style={{ color: "var(--fbo-danger)" }}>{result.error}</span>}
+      </form>
+    </section>
   );
 }
 
