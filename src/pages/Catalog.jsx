@@ -3,13 +3,30 @@ import { Link } from "react-router-dom";
 import { apiGameCatalog } from "../api";
 import { fullCurrency, profitColor } from "../format";
 
+// Default to popularity ≥ 5 so the broader release-type query (which now
+// includes limited theatrical) doesn't drown the catalog in unknown indies.
+// Players can drop to "all" via the filter dropdown.
+const DEFAULT_MIN_POPULARITY = 5;
+
+const SORT_KEYS = {
+  title: { type: "string", default: "asc" },
+  release_date: { type: "string", default: "asc" },
+  status: { type: "string", default: "asc" },
+  popularity: { type: "number", default: "desc" },
+  owner_username: { type: "string", default: "asc" },
+  budget: { type: "number", default: "desc" },
+  revenue: { type: "number", default: "desc" },
+  profit: { type: "number", default: "desc" },
+};
+
 export default function Catalog() {
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState("");
   const [status, setStatus] = useState("all");
   const [owner, setOwner] = useState("all");
-  const [minPopularity, setMinPopularity] = useState(0);
+  const [minPopularity, setMinPopularity] = useState(DEFAULT_MIN_POPULARITY);
   const [query, setQuery] = useState("");
+  const [sort, setSort] = useState({ key: "release_date", dir: "asc" });
 
   useEffect(() => {
     let cancelled = false;
@@ -21,11 +38,34 @@ export default function Catalog() {
     return () => { cancelled = true; };
   }, [status, owner, minPopularity]);
 
-  const filtered = useMemo(() => {
+  function toggleSort(key) {
+    setSort((s) =>
+      s.key === key
+        ? { key, dir: s.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: SORT_KEYS[key].default }
+    );
+  }
+
+  const visible = useMemo(() => {
     if (!rows) return null;
     const q = query.trim().toLowerCase();
-    return q ? rows.filter((m) => m.title.toLowerCase().includes(q)) : rows;
-  }, [rows, query]);
+    const filtered = q ? rows.filter((m) => m.title.toLowerCase().includes(q)) : rows;
+    const meta = SORT_KEYS[sort.key];
+    const dir = sort.dir === "asc" ? 1 : -1;
+    const isNumber = meta?.type === "number";
+    return [...filtered].sort((a, b) => {
+      const av = a[sort.key];
+      const bv = b[sort.key];
+      // Nulls/empties always sort last regardless of direction.
+      const aMissing = av == null || av === "";
+      const bMissing = bv == null || bv === "";
+      if (aMissing && bMissing) return 0;
+      if (aMissing) return 1;
+      if (bMissing) return -1;
+      if (isNumber) return (av - bv) * dir;
+      return String(av).localeCompare(String(bv)) * dir;
+    });
+  }, [rows, query, sort]);
 
   if (err) return <div style={{ color: "crimson" }}>{err}</div>;
   if (!rows) return <div>Loading catalog...</div>;
@@ -73,18 +113,18 @@ export default function Catalog() {
       <table style={{ width: "100%", background: "var(--fbo-bg-card)", border: "1px solid var(--fbo-border)", borderRadius: 8, borderCollapse: "collapse" }}>
         <thead>
           <tr style={{ textAlign: "left", color: "var(--fbo-text-muted)", background: "rgba(255,255,255,0.04)" }}>
-            <th style={{ padding: 8 }}>Movie</th>
-            <th style={{ padding: "8px 12px" }}>Release</th>
-            <th style={{ padding: "8px 12px" }}>Status</th>
-            <th style={{ textAlign: "right", padding: "8px 16px" }}>Popularity</th>
-            <th style={{ padding: "8px 12px" }}>Owner</th>
-            <th style={{ textAlign: "right", padding: "8px 12px" }}>Budget</th>
-            <th style={{ textAlign: "right", padding: "8px 12px" }}>Revenue</th>
-            <th style={{ textAlign: "right", padding: "8px 12px" }}>Profit</th>
+            <SortHeader label="Movie"      sortKey="title"          sort={sort} onSort={toggleSort} style={{ padding: 8 }} />
+            <SortHeader label="Release"    sortKey="release_date"   sort={sort} onSort={toggleSort} style={{ padding: "8px 12px" }} />
+            <SortHeader label="Status"     sortKey="status"         sort={sort} onSort={toggleSort} style={{ padding: "8px 12px" }} />
+            <SortHeader label="Popularity" sortKey="popularity"     sort={sort} onSort={toggleSort} align="right" style={{ padding: "8px 16px" }} />
+            <SortHeader label="Owner"      sortKey="owner_username" sort={sort} onSort={toggleSort} style={{ padding: "8px 12px" }} />
+            <SortHeader label="Budget"     sortKey="budget"         sort={sort} onSort={toggleSort} align="right" style={{ padding: "8px 12px" }} />
+            <SortHeader label="Revenue"    sortKey="revenue"        sort={sort} onSort={toggleSort} align="right" style={{ padding: "8px 12px" }} />
+            <SortHeader label="Profit"     sortKey="profit"         sort={sort} onSort={toggleSort} align="right" style={{ padding: "8px 12px" }} />
           </tr>
         </thead>
         <tbody>
-          {filtered.map((m) => (
+          {visible.map((m) => (
             <tr key={m.tmdb_id} style={{ borderTop: "1px solid var(--fbo-border)", opacity: m.is_void ? 0.5 : 1 }}>
               <td style={{ padding: 8 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -109,8 +149,28 @@ export default function Catalog() {
         </tbody>
       </table>
       </div>
-      {filtered.length === 0 && <div style={{ padding: 16, color: "#888" }}>No movies match.</div>}
+      {visible.length === 0 && <div style={{ padding: 16, color: "#888" }}>No movies match.</div>}
     </div>
+  );
+}
+
+function SortHeader({ label, sortKey, sort, onSort, align = "left", style }) {
+  const active = sort.key === sortKey;
+  const arrow = active ? (sort.dir === "asc" ? " ▲" : " ▼") : "";
+  return (
+    <th
+      onClick={() => onSort(sortKey)}
+      style={{
+        ...style,
+        textAlign: align,
+        cursor: "pointer",
+        userSelect: "none",
+        whiteSpace: "nowrap",
+        color: active ? "var(--fbo-gold-soft)" : undefined,
+      }}
+    >
+      {label}{arrow}
+    </th>
   );
 }
 

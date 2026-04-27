@@ -43,7 +43,10 @@ export async function discoverUsTheatrical({ token, from, to, minPopularity = 0,
   while (page <= totalPages && page <= maxPages) {
     const data = await tmdbFetch("/discover/movie", token, {
       region: "US",
-      with_release_type: 3,
+      // Include both wide (3) and limited (2) theatrical. TMDB tags
+      // A24-style indies and festival pickups (Is God Is, I Love Booster,
+      // etc.) as type 2 — narrow to type 3 only and they vanish.
+      with_release_type: "2|3",
       "primary_release_date.gte": from,
       "primary_release_date.lte": to,
       "popularity.gte": minPopularity || undefined,
