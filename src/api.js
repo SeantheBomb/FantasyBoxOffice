@@ -68,6 +68,11 @@ export const apiAdminRefreshMovies = (body = {}) =>
   jsonFetch("/api/admin/movies/refresh", { method: "POST", body });
 export const apiAdminAddMovie = (tmdbId) =>
   jsonFetch("/api/admin/movies/add", { method: "POST", body: { tmdb_id: tmdbId } });
+export const apiAdminRecordAuction = ({ tmdbId, winnerUserId, purchasePrice }) =>
+  jsonFetch("/api/admin/auction-results", {
+    method: "POST",
+    body: { tmdb_id: tmdbId, winner_user_id: winnerUserId, purchase_price: purchasePrice },
+  });
 export const apiAdminRefreshDailies = () =>
   jsonFetch("/api/admin/dailies/refresh", { method: "POST", body: {} });
 export const apiAdminBackfillDailies = () =>

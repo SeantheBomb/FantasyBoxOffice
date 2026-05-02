@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   apiAdminUsers, apiAdminGrantPoints, apiAdminSetAdmin,
   apiAdminRefreshMovies, apiAdminAddMovie, apiAdminRefreshDailies, apiAdminBackfillDailies, apiAdminAddDaily,
   apiAdminBackfillBudgets, apiAdminImportTsv,
   apiAdminUpdateProfile, apiAdminResetPassword, apiAdminSetInLeague,
   apiAdminPostStandingsToDiscord,
+  apiAdminRecordAuction,
   apiAuctions, apiAdminEditAuction, apiAdminDeleteAuction,
+  apiGameCatalog,
 } from "../api";
 import { useUser } from "../useUser";
 
@@ -19,11 +21,146 @@ export default function Admin() {
       <h1>Admin</h1>
       <UpdatesPanel />
       <AddMoviePanel />
+      <RecordAuctionPanel />
       <ImportPanel />
       <UsersPanel />
       <AuctionsPanel />
       <ManualDailyPanel />
     </div>
+  );
+}
+
+function RecordAuctionPanel() {
+  const [movies, setMovies] = useState(null);
+  const [users, setUsers] = useState(null);
+  const [movieQuery, setMovieQuery] = useState("");
+  const [selectedMovie, setSelectedMovie] = useState(null);
+  const [winnerId, setWinnerId] = useState("");
+  const [price, setPrice] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const [version, setVersion] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiGameCatalog({ status: "all", owner: "none" }).then((r) => {
+      if (!cancelled && r.ok) setMovies(r.data.movies);
+    });
+    apiAdminUsers().then((r) => {
+      if (!cancelled && r.ok) setUsers(r.data.users);
+    });
+    return () => { cancelled = true; };
+  }, [version]);
+
+  const matches = useMemo(() => {
+    if (!movies) return [];
+    const q = movieQuery.trim().toLowerCase();
+    if (!q) return movies.slice(0, 50);
+    return movies.filter((m) => m.title.toLowerCase().includes(q)).slice(0, 50);
+  }, [movies, movieQuery]);
+
+  async function submit(e) {
+    e.preventDefault();
+    setResult(null);
+    if (!selectedMovie) return setResult({ error: "Pick a movie" });
+    if (!winnerId) return setResult({ error: "Pick a winner" });
+    const p = Number(price);
+    if (!Number.isFinite(p) || p < 0) return setResult({ error: "Price must be ≥ 0" });
+
+    setBusy(true);
+    const r = await apiAdminRecordAuction({
+      tmdbId: selectedMovie.tmdb_id,
+      winnerUserId: winnerId,
+      purchasePrice: p,
+    });
+    setBusy(false);
+    if (r.ok) {
+      setResult({ ok: true, ...r.data });
+      setSelectedMovie(null);
+      setMovieQuery("");
+      setWinnerId("");
+      setPrice("");
+      setVersion((v) => v + 1);
+    } else {
+      setResult({ error: r.data?.error || `Failed (${r.status})` });
+    }
+  }
+
+  return (
+    <section style={card}>
+      <h3>Record auction result</h3>
+      <p style={{ fontSize: 13, color: "#666", marginTop: 0 }}>
+        For auctions still happening in Discord. Saves ownership and deducts the winner's
+        points. The movie will appear in their My Movies and standings immediately.
+      </p>
+      <form onSubmit={submit} style={{ display: "grid", gap: 8, maxWidth: 720 }}>
+        <div>
+          <label style={{ display: "block", marginBottom: 4 }}>Movie</label>
+          {selectedMovie ? (
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <span><b>{selectedMovie.title}</b> · {selectedMovie.release_date}</span>
+              <button type="button" onClick={() => { setSelectedMovie(null); setMovieQuery(""); }}>Change</button>
+            </div>
+          ) : (
+            <>
+              <input
+                placeholder="Search unowned movies..."
+                value={movieQuery}
+                onChange={(e) => setMovieQuery(e.target.value)}
+                style={{ width: "100%", maxWidth: 420 }}
+              />
+              {!movies ? <div style={{ marginTop: 6, color: "var(--fbo-text-muted)" }}>Loading...</div> : (
+                <div style={{ maxHeight: 200, overflow: "auto", border: "1px solid var(--fbo-border)", borderRadius: 4, marginTop: 6 }}>
+                  {matches.length === 0 ? (
+                    <div style={{ padding: 8, color: "var(--fbo-text-muted)" }}>No matches.</div>
+                  ) : matches.map((m) => (
+                    <div
+                      key={m.tmdb_id}
+                      onClick={() => setSelectedMovie(m)}
+                      style={{ padding: 6, cursor: "pointer", borderBottom: "1px solid var(--fbo-border)" }}
+                    >
+                      <b>{m.title}</b> · <span style={{ color: "var(--fbo-text-muted)" }}>{m.release_date}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <label>
+            Winner{" "}
+            <select value={winnerId} onChange={(e) => setWinnerId(e.target.value)} style={{ minWidth: 160 }}>
+              <option value="">— pick a user —</option>
+              {users && users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.username} ({u.points_remaining} pts)
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Winning bid (pts){" "}
+            <input
+              type="number"
+              min={0}
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              style={{ width: 110 }}
+            />
+          </label>
+          <button type="submit" disabled={busy || !selectedMovie || !winnerId || price === ""}>
+            {busy ? "Saving..." : "Save result"}
+          </button>
+        </div>
+        {result?.ok && (
+          <div style={{ color: "var(--fbo-success)" }}>
+            Saved: <b>{result.movie.title}</b> → <b>{result.winner.username}</b> for {result.purchase_price} pts
+          </div>
+        )}
+        {result?.error && <div style={{ color: "var(--fbo-danger)" }}>{result.error}</div>}
+      </form>
+    </section>
   );
 }
 
