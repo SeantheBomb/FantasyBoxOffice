@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "workers-observability": {
+      "type": "http",
+      "url": "https://workers-observability.mcp.cloudflare.com"
+    },
+    "workers-bindings": {
+      "type": "http",
+      "url": "https://workers-bindings.mcp.cloudflare.com"
+    },
+    "workers-builds": {
+      "type": "http",
+      "url": "https://workers-builds.mcp.cloudflare.com"
+    }
+  }
+}
