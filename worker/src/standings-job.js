@@ -1,10 +1,10 @@
-// Weekly Discord post: refreshes today's dailies, then compiles standings +
-// history, renders the profit chart via QuickChart, and posts to the configured
-// Discord webhook.
+// Weekly Discord post: backfills the full weekly BOM history for all tracked
+// movies, then compiles standings + history, renders the profit chart via
+// QuickChart, and posts to the configured Discord webhook.
 
 import { computeStandings } from "../../functions/api/game/_standings.js";
 import { computeHistory } from "../../functions/api/game/_history.js";
-import { refreshDailies } from "../../functions/api/_boxoffice.js";
+import { backfillDailies } from "../../functions/api/_boxoffice.js";
 import {
   buildStandingsMarkdown,
   buildChartConfig,
@@ -15,16 +15,16 @@ import {
 export async function runStandingsPost(env) {
   if (!env.DISCORD_WEBHOOK_URL) return { error: "DISCORD_WEBHOOK_URL missing" };
 
-  // Pull the freshest BOM numbers before snapshotting the standings — the
-  // daily-refresh cron fires at the same minute and there's no ordering
-  // guarantee, so we run it inline here. refreshDailies is idempotent
-  // (skips movies already scraped today), so the parallel daily run will
-  // be a no-op if this finishes first. Tolerant of failures: a scraper
-  // hiccup shouldn't block the Monday post.
+  // Backfill the full weekly BOM history for all tracked movies before
+  // computing standings. Unlike refreshDailies (today-only snapshot),
+  // backfillDailies scrapes BOM's cumulative weekly release tables and fills
+  // in every week's total — so even if the daily cron missed days, the chart
+  // and standings will reflect complete data. Tolerant of failures: a scraper
+  // hiccup shouldn't block the Discord post.
   let dailiesResult = null;
   if (env.TMDB_TOKEN) {
     try {
-      dailiesResult = await refreshDailies({ db: env.DB, token: env.TMDB_TOKEN });
+      dailiesResult = await backfillDailies({ db: env.DB, token: env.TMDB_TOKEN });
     } catch (e) {
       dailiesResult = { error: e.message || String(e) };
     }
