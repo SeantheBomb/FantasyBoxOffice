@@ -46,9 +46,13 @@ export async function onRequestGet({ request, env }) {
   ).bind(weekendDate).all();
 
   const picksRows = await env.DB.prepare(
-    `SELECT tmdb_id, discord_user_id, discord_username, estimate, points_awarded
-     FROM weekend_picks WHERE weekend_date = ?
-     ORDER BY tmdb_id, estimate DESC`
+    `SELECT wp.tmdb_id, wp.discord_user_id,
+            COALESCE(u.username, wp.discord_username) AS discord_username,
+            wp.estimate, wp.points_awarded
+     FROM weekend_picks wp
+     LEFT JOIN users u ON u.discord_user_id = wp.discord_user_id
+     WHERE wp.weekend_date = ?
+     ORDER BY wp.tmdb_id, wp.estimate DESC`
   ).bind(weekendDate).all();
 
   const picksByMovie = {};
