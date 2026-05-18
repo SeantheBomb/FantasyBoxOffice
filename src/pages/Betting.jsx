@@ -18,6 +18,13 @@ function fmtGross(v) {
   return "$" + a.toLocaleString();
 }
 
+// Estimates are stored as integer millions (5 = $5M) by the Discord bot.
+// Admin-entered picks may have been stored as raw dollar amounts (5000000 = $5M).
+// Handle both: values ≥ 1M are treated as raw dollars; smaller values as millions.
+function fmtEstimate(v) {
+  return v >= 1_000_000 ? fmtGross(v) : `$${v}M`;
+}
+
 const PLACE_LABEL = ["1st", "2nd", "3rd"];
 
 function PicksTable({ picks, myPickDiscordId, actual_gross }) {
@@ -44,7 +51,7 @@ function PicksTable({ picks, myPickDiscordId, actual_gross }) {
                 </td>
               )}
               <td style={{ padding: "2px 6px", fontWeight: isMe ? 700 : 400 }}>{p.discord_username}</td>
-              <td style={{ padding: "2px 6px", textAlign: "right" }}>${p.estimate}M</td>
+              <td style={{ padding: "2px 6px", textAlign: "right" }}>{fmtEstimate(p.estimate)}</td>
               {isScored && (
                 <td style={{ padding: "2px 6px", textAlign: "right", color: "#f5d27a" }}>
                   {p.points_awarded != null ? `+${p.points_awarded} pts` : "—"}
@@ -152,7 +159,7 @@ function MovieCard({ movie, isOpen, isInLeague, hasAuth, onBetPlaced }) {
         <PicksTable picks={movie.picks} myPickDiscordId={myPick?.discord_user_id} actual_gross={movie.actual_gross} />
         {myPick && isOpen && (
           <div style={{ marginTop: 6, fontSize: 12, color: "#aaa" }}>
-            Your bet: <strong style={{ color: "#f5d27a" }}>${myPick.estimate}M</strong>
+            Your bet: <strong style={{ color: "#f5d27a" }}>{fmtEstimate(myPick.estimate)}</strong>
           </div>
         )}
         {canBet && hasAuth && (
