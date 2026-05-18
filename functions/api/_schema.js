@@ -16,5 +16,8 @@ export async function bootstrapSchema(db) {
   await db.prepare(
     `ALTER TABLE movies ADD COLUMN budget_is_placeholder INTEGER NOT NULL DEFAULT 0`
   ).run().catch(() => {});
+  await db.prepare(
+    `ALTER TABLE users ADD COLUMN discord_user_id TEXT`
+  ).run().catch(() => {});
   bootstrapped = true;
 }

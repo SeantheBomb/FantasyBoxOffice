@@ -1,4 +1,5 @@
 import { json, badRequest, requireUser } from "../_auth";
+import { postAuctionStarted } from "../_discord";
 
 const DEFAULT_DURATION_MS = 24 * 60 * 60 * 1000;
 
@@ -39,7 +40,7 @@ export async function onRequestPost({ request, env }) {
   if (!Number.isInteger(startingBid) || startingBid < 1) return badRequest("startingBid must be >= 1");
 
   const movie = await env.DB.prepare(
-    `SELECT tmdb_id, title, status, release_date FROM movies WHERE tmdb_id = ?`
+    `SELECT tmdb_id, title, status, release_date, poster_url FROM movies WHERE tmdb_id = ?`
   ).bind(tmdbId).first();
   if (!movie) return badRequest("Movie not found");
   if (movie.status !== "unreleased") return badRequest("Movie already released");
@@ -71,6 +72,14 @@ export async function onRequestPost({ request, env }) {
   await env.DB.prepare(
     `INSERT INTO auction_bids (id, auction_id, user_id, amount, bid_at) VALUES (?, ?, ?, ?, ?)`
   ).bind(crypto.randomUUID(), id, user.id, startingBid, now).run();
+
+  await postAuctionStarted(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
+    movieTitle: movie.title,
+    posterUrl: movie.poster_url,
+    endsAt,
+    startingBid,
+    starterUsername: user.username,
+  });
 
   return json({ ok: true, id });
 }

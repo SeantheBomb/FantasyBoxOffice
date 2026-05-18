@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useUser } from "../useUser";
-import { apiUpdateMyProfile, apiChangeMyPassword } from "../api";
+import { apiUpdateMyProfile, apiChangeMyPassword, apiLinkDiscord } from "../api";
 
 export default function Me() {
   const nav = useNavigate();
@@ -24,8 +24,10 @@ export default function Me() {
         <div><b>Points remaining:</b> {user.points_remaining}</div>
         <div><b>Admin:</b> {user.is_admin ? "yes" : "no"}</div>
         <div><b>Created at:</b> {user.created_at}</div>
+        <div><b>Discord ID:</b> {user.discord_user_id || <span style={{ color: "#888" }}>not linked</span>}</div>
       </div>
       <UsernameForm current={user.username} onSaved={refresh} />
+      <DiscordForm current={user.discord_user_id} onSaved={refresh} />
       <PasswordForm />
     </div>
   );
@@ -55,6 +57,49 @@ function UsernameForm({ current, onSaved }) {
       <form onSubmit={submit} style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <input value={value} onChange={(e) => setValue(e.target.value)} style={{ flex: 1 }} />
         <button disabled={busy || value === current} type="submit">Save</button>
+      </form>
+      {status && (
+        <div style={{ marginTop: 8, color: status.kind === "ok" ? "#1b8a3d" : "crimson" }}>
+          {status.msg}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function DiscordForm({ current, onSaved }) {
+  const [value, setValue] = useState(current || "");
+  const [status, setStatus] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    setBusy(true);
+    const r = await apiLinkDiscord(value || null);
+    setBusy(false);
+    if (r.ok) {
+      setStatus({ kind: "ok", msg: value ? "Discord account linked." : "Discord account unlinked." });
+      onSaved?.();
+    } else {
+      setStatus({ kind: "err", msg: r.data?.error || "Failed to update" });
+    }
+  }
+
+  return (
+    <section style={card}>
+      <h3>Link Discord</h3>
+      <p style={{ margin: "0 0 10px", color: "#555", fontSize: 14 }}>
+        Required to use <code>/auction</code>, <code>/bid</code>, and <code>/pass</code> in Discord.
+        Enable <b>Developer Mode</b> in Discord (Settings → Advanced), then right-click your username and copy your User ID.
+      </p>
+      <form onSubmit={submit} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="e.g. 123456789012345678"
+          style={{ flex: 1 }}
+        />
+        <button disabled={busy || value === (current || "")} type="submit">Save</button>
       </form>
       {status && (
         <div style={{ marginTop: 8, color: status.kind === "ok" ? "#1b8a3d" : "crimson" }}>

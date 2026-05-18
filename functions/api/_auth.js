@@ -57,7 +57,7 @@ export async function getSessionUser(request, env) {
   if (new Date(s.expires_at).getTime() < Date.now()) return null;
 
   const u = await env.DB.prepare(
-    `SELECT id, email, username, real_name, created_at, is_admin, points_remaining
+    `SELECT id, email, username, real_name, created_at, is_admin, points_remaining, discord_user_id
        FROM users WHERE id = ? LIMIT 1`
   )
     .bind(s.user_id)

@@ -25,13 +25,18 @@ export async function settleAuction(db, auctionId) {
     .bind(a.tmdb_id)
     .first();
   if (already) {
-    // Edge case: movie got owned outside this auction. Cancel it.
     await db
       .prepare(`UPDATE auctions SET status = 'cancelled', settled_at = ? WHERE id = ?`)
       .bind(new Date().toISOString(), a.id)
       .run();
     return { settled: false, reason: "already_owned" };
   }
+
+  // Fetch info needed for Discord notification before committing.
+  const [movie, winner] = await Promise.all([
+    db.prepare(`SELECT title, poster_url, release_date FROM movies WHERE tmdb_id = ? LIMIT 1`).bind(a.tmdb_id).first(),
+    db.prepare(`SELECT username, discord_user_id FROM users WHERE id = ? LIMIT 1`).bind(a.current_bidder_id).first(),
+  ]);
 
   const now = new Date().toISOString();
   await db.batch([
@@ -50,10 +55,21 @@ export async function settleAuction(db, auctionId) {
       .prepare(`UPDATE auctions SET status = 'sold', settled_at = ? WHERE id = ?`)
       .bind(now, a.id),
   ]);
-  return { settled: true, tmdbId: a.tmdb_id, winnerId: a.current_bidder_id, price: a.current_bid };
+  return {
+    settled: true,
+    tmdbId: a.tmdb_id,
+    winnerId: a.current_bidder_id,
+    price: a.current_bid,
+    movieTitle: movie?.title,
+    posterUrl: movie?.poster_url,
+    releaseDate: movie?.release_date,
+    winnerUsername: winner?.username,
+    winnerDiscordId: winner?.discord_user_id,
+  };
 }
 
-// Settle every open auction whose timer has expired. Returns counts.
+// Settle every open auction whose timer has expired. Returns counts plus
+// the settled auction details (for Discord notifications).
 export async function settleExpiredAuctions(db) {
   const now = new Date().toISOString();
   const { results } = await db
@@ -62,12 +78,15 @@ export async function settleExpiredAuctions(db) {
     .all();
   let settled = 0;
   let skipped = 0;
+  const settledAuctions = [];
   for (const row of results || []) {
     const r = await settleAuction(db, row.id);
-    if (r.settled) settled += 1;
-    else skipped += 1;
+    if (r.settled) {
+      settled += 1;
+      settledAuctions.push(r);
+    } else skipped += 1;
   }
-  return { settled, skipped, checked: results?.length || 0 };
+  return { settled, skipped, checked: results?.length || 0, settledAuctions };
 }
 
 // Returns eligible bidder user ids — real accounts, excludes placeholders from
@@ -104,6 +123,12 @@ export async function settleIfAllPassed(db, auctionId) {
   const allPassed = others.every((id) => passedIds.has(id));
   if (!allPassed) return { settled: false, reason: "passes_pending" };
 
+  // Fetch info needed for Discord notification before committing.
+  const [movie, winner] = await Promise.all([
+    db.prepare(`SELECT title, poster_url, release_date FROM movies WHERE tmdb_id = ? LIMIT 1`).bind(a.tmdb_id).first(),
+    db.prepare(`SELECT username, discord_user_id FROM users WHERE id = ? LIMIT 1`).bind(a.current_bidder_id).first(),
+  ]);
+
   const now = new Date().toISOString();
   await db.batch([
     db
@@ -119,5 +144,15 @@ export async function settleIfAllPassed(db, auctionId) {
       .prepare(`UPDATE auctions SET status = 'sold', settled_at = ? WHERE id = ?`)
       .bind(now, a.id),
   ]);
-  return { settled: true, tmdbId: a.tmdb_id, winnerId: a.current_bidder_id, price: a.current_bid };
+  return {
+    settled: true,
+    tmdbId: a.tmdb_id,
+    winnerId: a.current_bidder_id,
+    price: a.current_bid,
+    movieTitle: movie?.title,
+    posterUrl: movie?.poster_url,
+    releaseDate: movie?.release_date,
+    winnerUsername: winner?.username,
+    winnerDiscordId: winner?.discord_user_id,
+  };
 }

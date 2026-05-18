@@ -10,6 +10,7 @@
 import { refreshMovies, rollStatuses } from "../../functions/api/_tmdb.js";
 import { refreshDailies } from "../../functions/api/_boxoffice.js";
 import { settleExpiredAuctions } from "../../functions/api/_settlement.js";
+import { postAuctionSettled } from "../../functions/api/_discord.js";
 import { runStandingsPost } from "./standings-job.js";
 import { runLastCallPost } from "./last-call-job.js";
 
@@ -70,5 +71,18 @@ async function runDailiesRefresh(env) {
 }
 
 async function runSettleExpired(env) {
-  return settleExpiredAuctions(env.DB);
+  const result = await settleExpiredAuctions(env.DB);
+  if (env.DISCORD_GAME_FEED_WEBHOOK_URL && result.settledAuctions?.length) {
+    for (const a of result.settledAuctions) {
+      await postAuctionSettled(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
+        movieTitle: a.movieTitle,
+        posterUrl: a.posterUrl,
+        releaseDate: a.releaseDate,
+        winnerDiscordId: a.winnerDiscordId,
+        winnerUsername: a.winnerUsername,
+        amount: a.price,
+      }).catch(() => {});
+    }
+  }
+  return result;
 }

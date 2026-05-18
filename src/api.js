@@ -136,3 +136,5 @@ export const apiUpdateMyProfile = (username) =>
   jsonFetch("/api/me/profile", { method: "POST", body: { username } });
 export const apiChangeMyPassword = (oldPassword, newPassword) =>
   jsonFetch("/api/me/password", { method: "POST", body: { oldPassword, newPassword } });
+export const apiLinkDiscord = (discordUserId) =>
+  jsonFetch("/api/me/discord", { method: "POST", body: { discord_user_id: discordUserId } });

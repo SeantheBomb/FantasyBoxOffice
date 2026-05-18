@@ -1,6 +1,15 @@
 import { formatShort } from "../_format.js";
+import { settleIfAllPassed } from "../_settlement.js";
+import {
+  postAuctionStarted,
+  postBidPlaced,
+  postPassPlaced,
+  postAuctionSettled,
+} from "../_discord.js";
 
 const DISCORD_PUBLIC_KEY = "c606c11537ec649f897e142db70be33fe1432084920be1a0f18ba9d694609be7";
+const DEFAULT_AUCTION_DURATION_MS = 24 * 60 * 60 * 1000;
+const EXTEND_MS = 5 * 60 * 1000;
 
 function hexToBytes(hex) {
   const bytes = new Uint8Array(hex.length / 2);
@@ -54,8 +63,6 @@ function ephemeral(content) {
 }
 
 async function getActiveWeekend(db) {
-  // Betting closes when the weekend arrives (movies hit theaters Friday).
-  // Use strict > so bets are locked out on release day itself.
   const row = await db
     .prepare(
       `SELECT DISTINCT weekend_date FROM weekend_movies
@@ -64,6 +71,17 @@ async function getActiveWeekend(db) {
     )
     .first();
   return row?.weekend_date ?? null;
+}
+
+// Look up the league user linked to a Discord user ID.
+async function getLeagueUser(db, discordUserId) {
+  return db
+    .prepare(
+      `SELECT id, username, points_remaining FROM users
+       WHERE discord_user_id = ? AND in_league = 1 LIMIT 1`
+    )
+    .bind(discordUserId)
+    .first();
 }
 
 export async function onRequestPost({ request, env }) {
@@ -77,93 +95,329 @@ export async function onRequestPost({ request, env }) {
     return respond({ type: 1 });
   }
 
-  // Autocomplete — return this weekend's movie list.
+  // Autocomplete — route by command name.
   if (interaction.type === 4) {
-    const weekend = await getActiveWeekend(env.DB);
-    if (!weekend) return respond({ type: 8, data: { choices: [] } });
+    const cmdName = interaction.data?.name;
 
-    const { results } = await env.DB.prepare(
-      `SELECT m.tmdb_id, m.title FROM weekend_movies wm
-       JOIN movies m ON m.tmdb_id = wm.tmdb_id
-       WHERE wm.weekend_date = ?
-       ORDER BY m.title`
-    )
-      .bind(weekend)
-      .all();
+    if (cmdName === "bet") {
+      const weekend = await getActiveWeekend(env.DB);
+      if (!weekend) return respond({ type: 8, data: { choices: [] } });
+      const { results } = await env.DB.prepare(
+        `SELECT m.tmdb_id, m.title FROM weekend_movies wm
+         JOIN movies m ON m.tmdb_id = wm.tmdb_id
+         WHERE wm.weekend_date = ?
+         ORDER BY m.title`
+      )
+        .bind(weekend)
+        .all();
+      return respond({
+        type: 8,
+        data: { choices: results.map((r) => ({ name: r.title, value: String(r.tmdb_id) })) },
+      });
+    }
 
-    const choices = results.map((r) => ({
-      name: r.title,
-      value: String(r.tmdb_id),
-    }));
-    return respond({ type: 8, data: { choices } });
+    if (cmdName === "auction") {
+      // Eligible: unreleased, not owned, no open auction already.
+      const { results } = await env.DB.prepare(
+        `SELECT m.tmdb_id, m.title FROM movies m
+         WHERE m.status = 'unreleased'
+           AND NOT EXISTS (SELECT 1 FROM owned_movies om WHERE om.tmdb_id = m.tmdb_id AND om.is_void = 0)
+           AND NOT EXISTS (SELECT 1 FROM auctions a WHERE a.tmdb_id = m.tmdb_id AND a.status = 'open')
+         ORDER BY m.title LIMIT 25`
+      ).all();
+      return respond({
+        type: 8,
+        data: { choices: results.map((r) => ({ name: r.title, value: String(r.tmdb_id) })) },
+      });
+    }
+
+    if (cmdName === "bid" || cmdName === "pass") {
+      const { results } = await env.DB.prepare(
+        `SELECT a.id, m.title, a.current_bid FROM auctions a
+         JOIN movies m ON m.tmdb_id = a.tmdb_id
+         WHERE a.status = 'open'
+         ORDER BY m.title LIMIT 25`
+      ).all();
+      return respond({
+        type: 8,
+        data: {
+          choices: results.map((r) => ({
+            name: `${r.title} (current: ${r.current_bid} pt${r.current_bid !== 1 ? "s" : ""})`,
+            value: r.id,
+          })),
+        },
+      });
+    }
+
+    return respond({ type: 8, data: { choices: [] } });
   }
 
-  // Slash command: /bet
-  if (interaction.type === 2 && interaction.data?.name === "bet") {
-    const opts = Object.fromEntries(
-      (interaction.data.options || []).map((o) => [o.name, o.value])
-    );
+  // Slash commands.
+  if (interaction.type === 2) {
+    const cmdName = interaction.data?.name;
+    const discordUser = interaction.member?.user ?? interaction.user;
 
-    const estimate = parseEstimate(opts.estimate);
-    if (!estimate) {
-      return ephemeral("Bets must be a whole number in millions — e.g. `$45M` or `45M`. No decimals.");
-    }
-
-    const tmdbId = parseInt(opts.movie, 10);
-    const weekend = await getActiveWeekend(env.DB);
-    if (!weekend) {
-      return ephemeral("Betting is closed — movies are already in theaters or no upcoming weekend is configured. Check back Monday!");
-    }
-
-    const movie = await env.DB.prepare(
-      `SELECT m.title FROM weekend_movies wm
-       JOIN movies m ON m.tmdb_id = wm.tmdb_id
-       WHERE wm.weekend_date = ? AND wm.tmdb_id = ?`
-    )
-      .bind(weekend, tmdbId)
-      .first();
-
-    if (!movie) {
-      return ephemeral("That movie isn't in this weekend's lineup.");
-    }
-
-    const user = interaction.member?.user ?? interaction.user;
-
-    // Reject if another player already has this exact amount for this movie.
-    const taken = await env.DB.prepare(
-      `SELECT discord_username FROM weekend_picks
-       WHERE tmdb_id = ? AND weekend_date = ? AND estimate = ? AND discord_user_id != ?
-       LIMIT 1`
-    )
-      .bind(tmdbId, weekend, estimate, user.id)
-      .first();
-    if (taken) {
-      return ephemeral(
-        `**${formatShort(estimate)}** is already taken by another player — pick a different amount!`
+    // ── /bet ─────────────────────────────────────────────────────────────────
+    if (cmdName === "bet") {
+      const opts = Object.fromEntries(
+        (interaction.data.options || []).map((o) => [o.name, o.value])
       );
+
+      const estimate = parseEstimate(opts.estimate);
+      if (!estimate) {
+        return ephemeral("Bets must be a whole number in millions — e.g. `$45M` or `45M`. No decimals.");
+      }
+
+      const tmdbId = parseInt(opts.movie, 10);
+      const weekend = await getActiveWeekend(env.DB);
+      if (!weekend) {
+        return ephemeral("Betting is closed — movies are already in theaters or no upcoming weekend is configured. Check back Monday!");
+      }
+
+      const movie = await env.DB.prepare(
+        `SELECT m.title FROM weekend_movies wm
+         JOIN movies m ON m.tmdb_id = wm.tmdb_id
+         WHERE wm.weekend_date = ? AND wm.tmdb_id = ?`
+      )
+        .bind(weekend, tmdbId)
+        .first();
+
+      if (!movie) {
+        return ephemeral("That movie isn't in this weekend's lineup.");
+      }
+
+      const taken = await env.DB.prepare(
+        `SELECT discord_username FROM weekend_picks
+         WHERE tmdb_id = ? AND weekend_date = ? AND estimate = ? AND discord_user_id != ?
+         LIMIT 1`
+      )
+        .bind(tmdbId, weekend, estimate, discordUser.id)
+        .first();
+      if (taken) {
+        return ephemeral(
+          `**${formatShort(estimate)}** is already taken by another player — pick a different amount!`
+        );
+      }
+
+      await env.DB.prepare(
+        `INSERT INTO weekend_picks (discord_user_id, discord_username, tmdb_id, estimate, weekend_date)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(discord_user_id, tmdb_id, weekend_date)
+         DO UPDATE SET estimate = excluded.estimate, discord_username = excluded.discord_username`
+      )
+        .bind(discordUser.id, discordUser.global_name ?? discordUser.username, tmdbId, estimate, weekend)
+        .run();
+
+      if (env.DISCORD_MOVIE_CHAT_WEBHOOK_URL) {
+        await fetch(env.DISCORD_MOVIE_CHAT_WEBHOOK_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content: `🎲 <@${discordUser.id}> bet **${formatShort(estimate)}** on **${movie.title}**`,
+          }),
+        }).catch(() => {});
+      }
+
+      return ephemeral(`Bet locked in: **${movie.title}** — ${formatShort(estimate)}`);
     }
 
-    await env.DB.prepare(
-      `INSERT INTO weekend_picks (discord_user_id, discord_username, tmdb_id, estimate, weekend_date)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(discord_user_id, tmdb_id, weekend_date)
-       DO UPDATE SET estimate = excluded.estimate, discord_username = excluded.discord_username`
-    )
-      .bind(user.id, user.global_name ?? user.username, tmdbId, estimate, weekend)
-      .run();
+    // ── /auction ──────────────────────────────────────────────────────────────
+    if (cmdName === "auction") {
+      const opts = Object.fromEntries(
+        (interaction.data.options || []).map((o) => [o.name, o.value])
+      );
 
-    // Post publicly so everyone can see each other's bets.
-    if (env.DISCORD_MOVIE_CHAT_WEBHOOK_URL) {
-      await fetch(env.DISCORD_MOVIE_CHAT_WEBHOOK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content: `🎲 <@${user.id}> bet **${formatShort(estimate)}** on **${movie.title}**`,
-        }),
-      }).catch(() => {});
+      const leagueUser = await getLeagueUser(env.DB, discordUser.id);
+      if (!leagueUser) {
+        return ephemeral(
+          "Your Discord account isn't linked to a league account yet. Log in at https://fantasyboxoffice.pages.dev/ and visit **My Account** to link your Discord ID."
+        );
+      }
+
+      const tmdbId = parseInt(opts.movie, 10);
+      const startingBid = Number(opts.starting_bid ?? 1);
+      if (!Number.isInteger(startingBid) || startingBid < 1) {
+        return ephemeral("Starting bid must be a whole number ≥ 1.");
+      }
+
+      const movie = await env.DB.prepare(
+        `SELECT tmdb_id, title, status, release_date, poster_url FROM movies WHERE tmdb_id = ?`
+      ).bind(tmdbId).first();
+      if (!movie) return ephemeral("Movie not found.");
+      if (movie.status !== "unreleased") return ephemeral("That movie has already been released and can't be auctioned.");
+
+      const existingOwner = await env.DB.prepare(
+        `SELECT tmdb_id FROM owned_movies WHERE tmdb_id = ? AND is_void = 0`
+      ).bind(tmdbId).first();
+      if (existingOwner) return ephemeral("That movie is already owned.");
+
+      const existingAuction = await env.DB.prepare(
+        `SELECT id FROM auctions WHERE tmdb_id = ? AND status = 'open'`
+      ).bind(tmdbId).first();
+      if (existingAuction) return ephemeral("An auction is already open for that movie.");
+
+      if ((leagueUser.points_remaining || 0) < startingBid) {
+        return ephemeral(`Not enough points — you have **${leagueUser.points_remaining}** but the starting bid is **${startingBid}**.`);
+      }
+
+      const id = crypto.randomUUID();
+      const now = new Date().toISOString();
+      const endsAt = new Date(Date.now() + DEFAULT_AUCTION_DURATION_MS).toISOString();
+
+      await env.DB.prepare(
+        `INSERT INTO auctions
+           (id, tmdb_id, status, current_bid, current_bidder_id, started_by_user_id, ends_at, created_at)
+         VALUES (?, ?, 'open', ?, ?, ?, ?, ?)`
+      ).bind(id, tmdbId, startingBid, leagueUser.id, leagueUser.id, endsAt, now).run();
+
+      await env.DB.prepare(
+        `INSERT INTO auction_bids (id, auction_id, user_id, amount, bid_at) VALUES (?, ?, ?, ?, ?)`
+      ).bind(crypto.randomUUID(), id, leagueUser.id, startingBid, now).run();
+
+      await postAuctionStarted(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
+        movieTitle: movie.title,
+        posterUrl: movie.poster_url,
+        endsAt,
+        startingBid,
+        starterUsername: leagueUser.username,
+      });
+
+      return ephemeral(`Auction started for **${movie.title}** at **${startingBid} pt${startingBid !== 1 ? "s" : ""}**. Check #game-feed!`);
     }
 
-    return ephemeral(`Bet locked in: **${movie.title}** — ${formatShort(estimate)}`);
+    // ── /bid ──────────────────────────────────────────────────────────────────
+    if (cmdName === "bid") {
+      const opts = Object.fromEntries(
+        (interaction.data.options || []).map((o) => [o.name, o.value])
+      );
+
+      const leagueUser = await getLeagueUser(env.DB, discordUser.id);
+      if (!leagueUser) {
+        return ephemeral(
+          "Your Discord account isn't linked to a league account yet. Log in at https://fantasyboxoffice.pages.dev/ and visit **My Account** to link your Discord ID."
+        );
+      }
+
+      const auctionId = opts.movie; // value is auction UUID from autocomplete
+      const auction = await env.DB.prepare(
+        `SELECT a.id, a.status, a.current_bid, a.current_bidder_id, a.ends_at,
+                m.title AS movie_title, m.poster_url, m.release_date
+           FROM auctions a
+           JOIN movies m ON m.tmdb_id = a.tmdb_id
+           WHERE a.id = ? LIMIT 1`
+      ).bind(auctionId).first();
+
+      if (!auction) return ephemeral("Auction not found.");
+      if (auction.status !== "open") return ephemeral("That auction is no longer open.");
+      if (new Date(auction.ends_at).getTime() <= Date.now()) return ephemeral("That auction has ended.");
+
+      // Default amount = current_bid + 1 if not provided.
+      const rawAmount = opts.amount;
+      const amount = rawAmount != null ? Number(rawAmount) : auction.current_bid + 1;
+      if (!Number.isInteger(amount) || amount < 1) return ephemeral("Bid must be a whole number ≥ 1.");
+      if (amount <= auction.current_bid) {
+        return ephemeral(`Bid must be higher than the current bid of **${auction.current_bid} pt${auction.current_bid !== 1 ? "s" : ""}**.`);
+      }
+      if ((leagueUser.points_remaining || 0) < amount) {
+        return ephemeral(`Not enough points — you have **${leagueUser.points_remaining}** but the bid is **${amount}**.`);
+      }
+
+      const now = new Date().toISOString();
+      const extended = new Date(Math.max(
+        new Date(auction.ends_at).getTime(),
+        Date.now() + EXTEND_MS
+      )).toISOString();
+
+      await env.DB.batch([
+        env.DB.prepare(
+          `UPDATE auctions SET current_bid = ?, current_bidder_id = ?, ends_at = ? WHERE id = ? AND status = 'open'`
+        ).bind(amount, leagueUser.id, extended, auction.id),
+        env.DB.prepare(
+          `INSERT INTO auction_bids (id, auction_id, user_id, amount, bid_at) VALUES (?, ?, ?, ?, ?)`
+        ).bind(crypto.randomUUID(), auction.id, leagueUser.id, amount, now),
+        env.DB.prepare(
+          `DELETE FROM auction_passes WHERE auction_id = ? AND user_id = ?`
+        ).bind(auction.id, leagueUser.id),
+      ]);
+
+      await postBidPlaced(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
+        movieTitle: auction.movie_title,
+        bidderDiscordId: discordUser.id,
+        bidderUsername: leagueUser.username,
+        amount,
+      });
+
+      const settleResult = await settleIfAllPassed(env.DB, auction.id);
+      if (settleResult.settled) {
+        await postAuctionSettled(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
+          movieTitle: settleResult.movieTitle,
+          posterUrl: settleResult.posterUrl,
+          releaseDate: settleResult.releaseDate,
+          winnerDiscordId: settleResult.winnerDiscordId,
+          winnerUsername: settleResult.winnerUsername,
+          amount: settleResult.price,
+        });
+        return ephemeral(`Bid placed — and since everyone else passed, **${auction.movie_title}** is now yours for **${amount} pt${amount !== 1 ? "s" : ""}**! Check #game-feed.`);
+      }
+
+      return ephemeral(`Bid of **${amount} pt${amount !== 1 ? "s" : ""}** on **${auction.movie_title}** placed. Check #game-feed!`);
+    }
+
+    // ── /pass ─────────────────────────────────────────────────────────────────
+    if (cmdName === "pass") {
+      const opts = Object.fromEntries(
+        (interaction.data.options || []).map((o) => [o.name, o.value])
+      );
+
+      const leagueUser = await getLeagueUser(env.DB, discordUser.id);
+      if (!leagueUser) {
+        return ephemeral(
+          "Your Discord account isn't linked to a league account yet. Log in at https://fantasyboxoffice.pages.dev/ and visit **My Account** to link your Discord ID."
+        );
+      }
+
+      const auctionId = opts.movie; // value is auction UUID from autocomplete
+      const auction = await env.DB.prepare(
+        `SELECT a.id, a.status, a.current_bidder_id,
+                m.title AS movie_title, m.poster_url, m.release_date
+           FROM auctions a
+           JOIN movies m ON m.tmdb_id = a.tmdb_id
+           WHERE a.id = ? LIMIT 1`
+      ).bind(auctionId).first();
+
+      if (!auction) return ephemeral("Auction not found.");
+      if (auction.status !== "open") return ephemeral("That auction is no longer open.");
+      if (auction.current_bidder_id === leagueUser.id) {
+        return ephemeral("You're the current high bidder — you can't pass. Place a new bid if you want to stay in.");
+      }
+
+      await env.DB.prepare(
+        `INSERT INTO auction_passes (auction_id, user_id, passed_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(auction_id, user_id) DO NOTHING`
+      ).bind(auction.id, leagueUser.id, new Date().toISOString()).run();
+
+      await postPassPlaced(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
+        movieTitle: auction.movie_title,
+        passerDiscordId: discordUser.id,
+        passerUsername: leagueUser.username,
+      });
+
+      const settleResult = await settleIfAllPassed(env.DB, auction.id);
+      if (settleResult.settled) {
+        await postAuctionSettled(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
+          movieTitle: settleResult.movieTitle,
+          posterUrl: settleResult.posterUrl,
+          releaseDate: settleResult.releaseDate,
+          winnerDiscordId: settleResult.winnerDiscordId,
+          winnerUsername: settleResult.winnerUsername,
+          amount: settleResult.price,
+        });
+        return ephemeral(`Passed on **${auction.movie_title}** — and with everyone else out, it's been awarded to the last bidder. Check #game-feed.`);
+      }
+
+      return ephemeral(`Passed on **${auction.movie_title}**. You won't be able to bid on this movie again.`);
+    }
   }
 
   return respond({ type: 1 });

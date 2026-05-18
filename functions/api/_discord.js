@@ -207,6 +207,79 @@ export async function postWeekendAnnouncement(webhookUrl, { weekendDate, movies 
   }
 }
 
+// ── Auction notifications ────────────────────────────────────────────────────
+
+export async function postAuctionStarted(webhookUrl, { movieTitle, posterUrl, endsAt, startingBid, starterUsername }) {
+  if (!webhookUrl) return;
+  const unixSec = Math.floor(new Date(endsAt).getTime() / 1000);
+  const embed = {
+    title: `🎬 New Auction: ${movieTitle}`,
+    description: [
+      `**${starterUsername}** opened an auction with a starting bid of **${startingBid} pt${startingBid !== 1 ? "s" : ""}**`,
+      ``,
+      `**Closes:** <t:${unixSec}:F> (<t:${unixSec}:R>)`,
+      ``,
+      `Use \`/bid\` to raise the bid, or \`/pass\` to opt out.`,
+    ].join("\n"),
+    color: 0x3b82f6,
+    ...(posterUrl ? { image: { url: posterUrl } } : {}),
+  };
+  await fetch(webhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content: "@everyone", embeds: [embed] }),
+  }).catch(() => {});
+}
+
+export async function postBidPlaced(webhookUrl, { movieTitle, bidderDiscordId, bidderUsername, amount }) {
+  if (!webhookUrl) return;
+  const who = bidderDiscordId ? `<@${bidderDiscordId}>` : `**${bidderUsername}**`;
+  await fetch(webhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      content: `💰 ${who} bid **${amount} pt${amount !== 1 ? "s" : ""}** on **${movieTitle}**`,
+    }),
+  }).catch(() => {});
+}
+
+export async function postPassPlaced(webhookUrl, { movieTitle, passerDiscordId, passerUsername }) {
+  if (!webhookUrl) return;
+  const who = passerDiscordId ? `<@${passerDiscordId}>` : `**${passerUsername}**`;
+  await fetch(webhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      content: `⏭️ ${who} passed on **${movieTitle}**`,
+    }),
+  }).catch(() => {});
+}
+
+export async function postAuctionSettled(webhookUrl, { movieTitle, posterUrl, winnerDiscordId, winnerUsername, amount, releaseDate }) {
+  if (!webhookUrl) return;
+  const who = winnerDiscordId ? `<@${winnerDiscordId}>` : `**${winnerUsername}**`;
+  const relStr = releaseDate
+    ? new Date(releaseDate + "T12:00:00Z").toLocaleDateString("en-US", {
+        month: "long", day: "numeric", year: "numeric", timeZone: "UTC",
+      })
+    : "TBD";
+  const embed = {
+    title: `🏆 Auction Closed: ${movieTitle}`,
+    description: [
+      `${who} won **${movieTitle}** for **${amount} pt${amount !== 1 ? "s" : ""}**!`,
+      ``,
+      `**Release Date:** ${relStr}`,
+    ].join("\n"),
+    color: 0x10b981,
+    ...(posterUrl ? { image: { url: posterUrl } } : {}),
+  };
+  await fetch(webhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content: "@everyone", embeds: [embed] }),
+  }).catch(() => {});
+}
+
 async function postOne(webhookUrl, { content, pngBytes, filename }) {
   if (pngBytes) {
     const form = new FormData();

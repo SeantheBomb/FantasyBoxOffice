@@ -1,5 +1,6 @@
 import { json, badRequest, requireUser, notFound } from "../../_auth";
 import { settleIfAllPassed } from "../../_settlement";
+import { postBidPlaced, postAuctionSettled } from "../../_discord";
 
 const EXTEND_MS = 5 * 60 * 1000;
 
@@ -13,7 +14,11 @@ export async function onRequestPost({ request, env, params }) {
   if (!Number.isInteger(amount) || amount < 1) return badRequest("amount must be an integer >= 1");
 
   const auction = await env.DB.prepare(
-    `SELECT id, status, current_bid, current_bidder_id, ends_at FROM auctions WHERE id = ? LIMIT 1`
+    `SELECT a.id, a.status, a.current_bid, a.current_bidder_id, a.ends_at,
+            m.title AS movie_title, m.poster_url, m.release_date
+       FROM auctions a
+       JOIN movies m ON m.tmdb_id = a.tmdb_id
+       WHERE a.id = ? LIMIT 1`
   ).bind(params.id).first();
   if (!auction) return notFound();
   if (auction.status !== "open") return badRequest("Auction is not open");
@@ -48,9 +53,26 @@ export async function onRequestPost({ request, env, params }) {
     ).bind(auction.id, user.id),
   ]);
 
+  await postBidPlaced(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
+    movieTitle: auction.movie_title,
+    bidderDiscordId: user.discord_user_id,
+    bidderUsername: user.username,
+    amount,
+  });
+
   // After the current bidder flips, the new leader may already have everyone
   // else passed against them — settle if so.
-  await settleIfAllPassed(env.DB, auction.id);
+  const settleResult = await settleIfAllPassed(env.DB, auction.id);
+  if (settleResult.settled) {
+    await postAuctionSettled(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
+      movieTitle: settleResult.movieTitle,
+      posterUrl: settleResult.posterUrl,
+      releaseDate: settleResult.releaseDate,
+      winnerDiscordId: settleResult.winnerDiscordId,
+      winnerUsername: settleResult.winnerUsername,
+      amount: settleResult.price,
+    });
+  }
 
   return json({ ok: true, current_bid: amount, ends_at: extended });
 }
