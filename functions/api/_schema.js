@@ -13,5 +13,8 @@ export async function bootstrapSchema(db) {
   await db.prepare(
     `ALTER TABLE users ADD COLUMN in_league INTEGER NOT NULL DEFAULT 1`
   ).run().catch(() => {}); // duplicate column = already applied
+  await db.prepare(
+    `ALTER TABLE movies ADD COLUMN budget_is_placeholder INTEGER NOT NULL DEFAULT 0`
+  ).run().catch(() => {});
   bootstrapped = true;
 }

@@ -36,7 +36,7 @@ export async function computeStandings(db) {
   ).all();
 
   const moviesQ = db.prepare(
-    `SELECT tmdb_id, title, budget, poster_url, release_date, status FROM movies`
+    `SELECT tmdb_id, title, budget, budget_is_placeholder, poster_url, release_date, status FROM movies`
   ).all();
 
   const ownedQ = db.prepare(
@@ -86,6 +86,7 @@ export async function computeStandings(db) {
       release_date: m.release_date,
       status: m.status,
       budget: m.budget,
+      budget_is_placeholder: !!m.budget_is_placeholder,
       revenue,
       prev_revenue: prevRevenueByTmdb.get(o.tmdb_id) ?? null,
       profit,

@@ -1,0 +1,1 @@
+ALTER TABLE movies ADD COLUMN budget_is_placeholder INTEGER NOT NULL DEFAULT 0;

@@ -7,6 +7,7 @@ import {
   apiAdminPostStandingsToDiscord,
   apiAdminRecordAuction,
   apiAdminRevokeMovie,
+  apiAdminSetBudget,
   apiAuctions, apiAdminEditAuction, apiAdminDeleteAuction,
   apiGameCatalog,
 } from "../api";
@@ -27,6 +28,7 @@ export default function Admin() {
       <ImportPanel />
       <UsersPanel />
       <AuctionsPanel />
+      <SetBudgetPanel />
       <ManualDailyPanel />
     </div>
   );
@@ -563,6 +565,130 @@ function AuctionsPanel() {
           </table>
         </div>
       )}
+    </section>
+  );
+}
+
+function SetBudgetPanel() {
+  const [movies, setMovies] = useState(null);
+  const [movieQuery, setMovieQuery] = useState("");
+  const [selected, setSelected] = useState(null);
+  const [budget, setBudget] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Show all owned released/complete movies — those are the ones needing a budget estimate.
+    apiGameCatalog({ owner: "any" }).then((r) => {
+      if (!cancelled && r.ok) setMovies(r.data.movies.filter((m) => m.status !== "unreleased"));
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const matches = useMemo(() => {
+    if (!movies) return [];
+    const q = movieQuery.trim().toLowerCase();
+    if (!q) return movies.slice(0, 50);
+    return movies.filter((m) => m.title.toLowerCase().includes(q)).slice(0, 50);
+  }, [movies, movieQuery]);
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!selected) return;
+    const b = Number(budget);
+    if (!Number.isFinite(b) || b < 0) return setResult({ error: "Budget must be ≥ 0" });
+    setBusy(true);
+    setResult(null);
+    const r = await apiAdminSetBudget(selected.tmdb_id, b);
+    setBusy(false);
+    if (r.ok) {
+      setResult({ ok: true, ...r.data });
+      setSelected(null);
+      setMovieQuery("");
+      setBudget("");
+    } else {
+      setResult({ error: r.data?.error || `Failed (${r.status})` });
+    }
+  }
+
+  return (
+    <section style={card}>
+      <h3>Set placeholder budget</h3>
+      <p style={{ fontSize: 13, color: "#666", marginTop: 0 }}>
+        For released movies where TMDB hasn't published a budget yet. Marked as an
+        estimate — the daily TMDB refresh will automatically replace it once the
+        official figure appears.
+      </p>
+      <form onSubmit={submit} style={{ display: "grid", gap: 8, maxWidth: 720 }}>
+        <div>
+          <label style={{ display: "block", marginBottom: 4 }}>Movie</label>
+          {selected ? (
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <span>
+                <b>{selected.title}</b>
+                {selected.budget > 0
+                  ? <> · current budget: <b>${(selected.budget / 1e6).toFixed(1)}M</b>{selected.budget_is_placeholder ? " *(est.)*" : ""}</>
+                  : " · no budget set"}
+              </span>
+              <button type="button" onClick={() => { setSelected(null); setMovieQuery(""); }}>Change</button>
+            </div>
+          ) : (
+            <>
+              <input
+                placeholder="Search released movies..."
+                value={movieQuery}
+                onChange={(e) => setMovieQuery(e.target.value)}
+                style={{ width: "100%", maxWidth: 420 }}
+              />
+              {!movies ? <div style={{ marginTop: 6, color: "var(--fbo-text-muted)" }}>Loading...</div> : (
+                <div style={{ maxHeight: 200, overflow: "auto", border: "1px solid var(--fbo-border)", borderRadius: 4, marginTop: 6 }}>
+                  {matches.length === 0 ? (
+                    <div style={{ padding: 8, color: "var(--fbo-text-muted)" }}>No matches.</div>
+                  ) : matches.map((m) => (
+                    <div
+                      key={m.tmdb_id}
+                      onClick={() => { setSelected(m); setBudget(m.budget > 0 ? String(m.budget) : ""); }}
+                      style={{ padding: 6, cursor: "pointer", borderBottom: "1px solid var(--fbo-border)" }}
+                    >
+                      <b>{m.title}</b>
+                      <span style={{ color: "var(--fbo-text-muted)" }}>
+                        {" · "}{m.release_date}
+                        {m.budget > 0
+                          ? <> · ${(m.budget / 1e6).toFixed(1)}M{m.budget_is_placeholder ? " est." : ""}</>
+                          : " · no budget"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <label>
+            Estimated budget ($){" "}
+            <input
+              type="number"
+              min={0}
+              step={1000000}
+              placeholder="e.g. 50000000"
+              value={budget}
+              onChange={(e) => setBudget(e.target.value)}
+              style={{ width: 160 }}
+            />
+          </label>
+          <button type="submit" disabled={busy || !selected || budget === ""}>
+            {busy ? "Saving..." : "Save placeholder budget"}
+          </button>
+        </div>
+        {result?.ok && (
+          <div style={{ color: "var(--fbo-success)" }}>
+            Saved: <b>{result.movie.title}</b> — ${(result.budget / 1e6).toFixed(1)}M *(est.)*
+          </div>
+        )}
+        {result?.error && <div style={{ color: "var(--fbo-danger)" }}>{result.error}</div>}
+      </form>
     </section>
   );
 }

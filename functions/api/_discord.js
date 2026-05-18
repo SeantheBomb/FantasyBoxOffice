@@ -43,7 +43,7 @@ function formatUserBlock(user, place, newReleaseCutoff) {
 
 function formatMovieLine(m, newReleaseCutoff) {
   const revenue = formatShort(m.revenue || 0);
-  const budget = formatShort(m.budget || 0);
+  const budget = formatShort(m.budget || 0) + (m.budget_is_placeholder ? " *(est.)*" : "");
   const profitNum = Number(m.profit) || 0;
   const profitStr = profitNum < 0
     ? `*${formatShort(profitNum)}*`

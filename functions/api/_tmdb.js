@@ -174,7 +174,7 @@ export async function backfillBudgets({ db, token, limit = 40 }) {
   const { results } = await db
     .prepare(
       `SELECT m.tmdb_id FROM movies m
-         WHERE (m.budget IS NULL OR m.budget = 0)
+         WHERE (m.budget IS NULL OR m.budget = 0 OR m.budget_is_placeholder = 1)
            AND (
              EXISTS (SELECT 1 FROM owned_movies o WHERE o.tmdb_id = m.tmdb_id)
              OR EXISTS (SELECT 1 FROM auctions a WHERE a.tmdb_id = m.tmdb_id AND a.status = 'open')
@@ -190,7 +190,7 @@ export async function backfillBudgets({ db, token, limit = 40 }) {
       const detail = await getMovieDetail(row.tmdb_id, token);
       if (detail?.budget) {
         await db
-          .prepare(`UPDATE movies SET budget = ? WHERE tmdb_id = ?`)
+          .prepare(`UPDATE movies SET budget = ?, budget_is_placeholder = 0 WHERE tmdb_id = ?`)
           .bind(detail.budget, row.tmdb_id)
           .run();
         updated += 1;
@@ -224,7 +224,7 @@ export async function refreshNewReleaseBudgets({ db, token }) {
       const detail = await getMovieDetail(row.tmdb_id, token);
       if (detail?.budget) {
         await db
-          .prepare(`UPDATE movies SET budget = ? WHERE tmdb_id = ?`)
+          .prepare(`UPDATE movies SET budget = ?, budget_is_placeholder = 0 WHERE tmdb_id = ?`)
           .bind(detail.budget, row.tmdb_id)
           .run();
         updated += 1;
