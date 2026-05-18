@@ -7,9 +7,7 @@ export function formatShort(n) {
   const abs = Math.abs(v);
   const sign = v < 0 ? "-" : "";
   if (abs >= 1_000_000_000) return `${sign}$${(abs / 1_000_000_000).toFixed(1)}B`;
-  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(0)}M`;
-  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(0)}K`;
-  return `${sign}$${Math.round(abs)}`;
+  return `${sign}$${Math.round(abs / 1_000_000)}M`;
 }
 
 export function ordinalPlace(n) {
