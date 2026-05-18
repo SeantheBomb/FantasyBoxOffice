@@ -11,6 +11,7 @@ import {
   buildChartConfig,
   renderChartPng,
   postToWebhook,
+  postWeekendAnnouncement,
 } from "../../functions/api/_discord.js";
 
 export async function runStandingsPost(env) {
@@ -62,6 +63,32 @@ export async function runStandingsPost(env) {
 
   await postToWebhook(env.DISCORD_WEBHOOK_URL, { messages, pngBytes });
 
+  let announcementResult = null;
+  if (env.DISCORD_MOVIE_CHAT_WEBHOOK_URL) {
+    try {
+      const { results: weekendMovies } = await env.DB.prepare(
+        `SELECT m.tmdb_id, m.title, m.poster_url, u.username AS owner, wm.weekend_date
+         FROM weekend_movies wm
+         JOIN movies m ON m.tmdb_id = wm.tmdb_id
+         JOIN owned_movies om ON om.tmdb_id = wm.tmdb_id AND om.is_void = 0
+         JOIN users u ON u.id = om.owner_user_id
+         WHERE wm.weekend_date >= date('now')
+         ORDER BY m.title`
+      ).all();
+      if (weekendMovies.length) {
+        await postWeekendAnnouncement(env.DISCORD_MOVIE_CHAT_WEBHOOK_URL, {
+          weekendDate: weekendMovies[0].weekend_date,
+          movies: weekendMovies,
+        });
+        announcementResult = { posted: true, movies: weekendMovies.length };
+      } else {
+        announcementResult = { skipped: "no upcoming weekend movies configured" };
+      }
+    } catch (e) {
+      announcementResult = { error: e.message || String(e) };
+    }
+  }
+
   return {
     posted: true,
     users: standings.users.length,
@@ -70,5 +97,6 @@ export async function runStandingsPost(env) {
     chart_error: chartError,
     dailies: dailiesResult,
     budgets: budgetResult,
+    announcement: announcementResult,
   };
 }
