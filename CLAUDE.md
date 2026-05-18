@@ -115,6 +115,7 @@ Pages Functions uses Pages env vars (set in CF dashboard or via `wrangler pages 
 - `main` is the deployed branch. Pages auto-deploys from it.
 - Long-running feature branch: `claude/fantasy-box-office-setup-7twaE`. Earlier work happened there before merging to `main`.
 - Push protocol: `git push -u origin <branch>`. Sandbox proxy occasionally returns 403 on push — when it does, the user can paste a one-shot PAT or push from their own terminal.
+- **No confirmation needed to commit and push** for this project. Commit and push to `main` directly without asking the user first.
 
 ## Style conventions (worth respecting)
 
