@@ -13,9 +13,13 @@ import {
   postToWebhook,
   postWeekendAnnouncement,
 } from "../../functions/api/_discord.js";
+import { scoreMovie } from "../../functions/api/_weekend-scoring.js";
 
 export async function runStandingsPost(env) {
   if (!env.DISCORD_WEBHOOK_URL) return { error: "DISCORD_WEBHOOK_URL missing" };
+
+  // Auto-score last weekend's picks before posting standings.
+  const scoringResult = await autoScoreWeekendPicks(env);
 
   // Backfill the full weekly BOM history for all tracked movies before
   // computing standings. Unlike refreshDailies (today-only snapshot),
@@ -98,5 +102,65 @@ export async function runStandingsPost(env) {
     dailies: dailiesResult,
     budgets: budgetResult,
     announcement: announcementResult,
+    scoring: scoringResult,
   };
+}
+
+async function autoScoreWeekendPicks(env) {
+  if (!env.DISCORD_GAME_FEED_WEBHOOK_URL) return { skipped: "DISCORD_GAME_FEED_WEBHOOK_URL missing" };
+
+  // Find movies from last weekend that haven't been scored yet.
+  // On Monday, 'now - 3 days' = Friday, catching last weekend's lineup.
+  const { results: unscored } = await env.DB.prepare(
+    `SELECT wm.tmdb_id, wm.weekend_date, m.title
+     FROM weekend_movies wm
+     JOIN movies m ON m.tmdb_id = wm.tmdb_id
+     WHERE wm.weekend_date < date('now')
+       AND wm.weekend_date >= date('now', '-3 days')
+       AND NOT EXISTS (
+         SELECT 1 FROM weekend_results wr
+         WHERE wr.tmdb_id = wm.tmdb_id AND wr.weekend_date = wm.weekend_date
+       )
+     ORDER BY wm.weekend_date, m.title`
+  ).all();
+
+  if (!unscored.length) return { skipped: "no unscored movies from last weekend" };
+
+  const results = [];
+  for (const movie of unscored) {
+    // Opening weekend gross = first dailies entry in the week after release.
+    // backfillDailies (run above) populates this from BOM's weekly release chart.
+    const daily = await env.DB.prepare(
+      `SELECT domestic_revenue FROM dailies
+       WHERE tmdb_id = ? AND date BETWEEN ? AND date(?, '+7 days')
+       ORDER BY date ASC LIMIT 1`
+    )
+      .bind(movie.tmdb_id, movie.weekend_date, movie.weekend_date)
+      .first();
+
+    if (!daily?.domestic_revenue) {
+      results.push({ tmdb_id: movie.tmdb_id, title: movie.title, error: "no BOM data yet — score manually" });
+      continue;
+    }
+
+    try {
+      const result = await scoreMovie(env.DB, {
+        tmdb_id: movie.tmdb_id,
+        weekend_date: movie.weekend_date,
+        actual_gross: daily.domestic_revenue,
+      });
+
+      await fetch(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: result.content }),
+      });
+
+      results.push({ tmdb_id: movie.tmdb_id, title: movie.title, actual_gross: daily.domestic_revenue });
+    } catch (e) {
+      results.push({ tmdb_id: movie.tmdb_id, title: movie.title, error: e.message || String(e) });
+    }
+  }
+
+  return { results };
 }

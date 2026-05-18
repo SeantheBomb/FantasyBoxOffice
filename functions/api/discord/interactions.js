@@ -33,14 +33,13 @@ async function verifySignature(request) {
 }
 
 function parseEstimate(input) {
+  // Integer millions only: $45M or 45M. No decimals, no raw numbers.
   const s = (input || "").trim().replace(/[$,\s]/g, "").toUpperCase();
-  const match = s.match(/^([\d.]+)([MB]?)$/);
+  const match = s.match(/^(\d+)M$/);
   if (!match) return null;
-  const num = parseFloat(match[1]);
-  if (isNaN(num) || num <= 0) return null;
-  if (match[2] === "B") return Math.round(num * 1_000_000_000);
-  if (match[2] === "M") return Math.round(num * 1_000_000);
-  return Math.round(num);
+  const num = parseInt(match[1], 10);
+  if (num <= 0) return null;
+  return num * 1_000_000;
 }
 
 function respond(data) {
@@ -107,7 +106,7 @@ export async function onRequestPost({ request, env }) {
 
     const estimate = parseEstimate(opts.estimate);
     if (!estimate) {
-      return ephemeral("Invalid estimate. Try `$45M`, `45M`, or `45000000`.");
+      return ephemeral("Bets must be a whole number in millions — e.g. `$45M` or `45M`. No decimals.");
     }
 
     const tmdbId = parseInt(opts.movie, 10);
@@ -129,6 +128,21 @@ export async function onRequestPost({ request, env }) {
     }
 
     const user = interaction.member?.user ?? interaction.user;
+
+    // Reject if another player already has this exact amount for this movie.
+    const taken = await env.DB.prepare(
+      `SELECT discord_username FROM weekend_picks
+       WHERE tmdb_id = ? AND weekend_date = ? AND estimate = ? AND discord_user_id != ?
+       LIMIT 1`
+    )
+      .bind(tmdbId, weekend, estimate, user.id)
+      .first();
+    if (taken) {
+      return ephemeral(
+        `**${formatShort(estimate)}** is already taken by another player — pick a different amount!`
+      );
+    }
+
     await env.DB.prepare(
       `INSERT INTO weekend_picks (discord_user_id, discord_username, tmdb_id, estimate, weekend_date)
        VALUES (?, ?, ?, ?, ?)
@@ -137,6 +151,17 @@ export async function onRequestPost({ request, env }) {
     )
       .bind(user.id, user.global_name ?? user.username, tmdbId, estimate, weekend)
       .run();
+
+    // Post publicly so everyone can see each other's bets.
+    if (env.DISCORD_MOVIE_CHAT_WEBHOOK_URL) {
+      await fetch(env.DISCORD_MOVIE_CHAT_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: `🎲 <@${user.id}> bet **${formatShort(estimate)}** on **${movie.title}**`,
+        }),
+      }).catch(() => {});
+    }
 
     return ephemeral(`Bet locked in: **${movie.title}** — ${formatShort(estimate)}`);
   }
