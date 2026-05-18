@@ -73,6 +73,8 @@ export const apiAdminRecordAuction = ({ tmdbId, winnerUserId, purchasePrice }) =
     method: "POST",
     body: { tmdb_id: tmdbId, winner_user_id: winnerUserId, purchase_price: purchasePrice },
   });
+export const apiAdminRevokeMovie = (tmdbId) =>
+  jsonFetch(`/api/admin/owned-movies/${tmdbId}`, { method: "DELETE" });
 export const apiAdminRefreshDailies = () =>
   jsonFetch("/api/admin/dailies/refresh", { method: "POST", body: {} });
 export const apiAdminBackfillDailies = () =>
