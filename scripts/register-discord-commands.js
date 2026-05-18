@@ -1,15 +1,15 @@
 // Register (or update) all Discord slash commands for the Fantasy Box Office bot.
 //
 // Usage:
-//   DISCORD_APP_ID=<app_id> DISCORD_BOT_TOKEN=<bot_token> node scripts/register-discord-commands.js
+//   DISCORD_BOT_TOKEN=<bot_token> node scripts/register-discord-commands.js
 //
-// Find your App ID and Bot Token at https://discord.com/developers/applications.
+// Bot token is at https://discord.com/developers/applications/1505968596478722230/bot
 
-const APP_ID = process.env.DISCORD_APP_ID;
+const APP_ID = "1505968596478722230";
 const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 
-if (!APP_ID || !BOT_TOKEN) {
-  console.error("Set DISCORD_APP_ID and DISCORD_BOT_TOKEN env vars before running.");
+if (!BOT_TOKEN) {
+  console.error("Set DISCORD_BOT_TOKEN env var before running.");
   process.exit(1);
 }
 
