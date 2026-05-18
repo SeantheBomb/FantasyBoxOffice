@@ -125,6 +125,12 @@ export const apiAdminDeletePick = (id) =>
 export const apiAdminCreatePick = (pick) =>
   jsonFetch("/api/admin/weekend/picks", { method: "POST", body: pick });
 
+// Betting / weekend predictions (public)
+export const apiBettingCurrent = () => jsonFetch("/api/betting/current");
+export const apiBettingHistory = () => jsonFetch("/api/betting/history");
+export const apiBet = (tmdbId, estimate) =>
+  jsonFetch("/api/betting", { method: "POST", body: { tmdb_id: tmdbId, estimate } });
+
 // Self-service
 export const apiUpdateMyProfile = (username) =>
   jsonFetch("/api/me/profile", { method: "POST", body: { username } });
