@@ -188,7 +188,7 @@ export async function postWeekendAnnouncement(webhookUrl, { weekendDate, movies 
 
   const [, m, d] = weekendDate.split("-");
   const dateStr = `${MONTH_ABBR[Number(m) - 1]} ${Number(d)}`;
-  const content = `## 🎬 Opening Weekend — ${dateStr}\nWhich of these movies will have the biggest opening weekend? Place your prediction with \`/bet\`!`;
+  const content = `## 🎬 Opening Weekend — ${dateStr}\nHow much will each of these movies earn on their opening weekend? Use \`/bet\` to submit your prediction for each one!`;
 
   const embeds = movies.map((movie) => ({
     title: movie.title,

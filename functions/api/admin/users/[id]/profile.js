@@ -25,6 +25,10 @@ export async function onRequestPost({ request, params, env }) {
     updates.push("real_name = ?");
     binds.push(body.real_name.trim());
   }
+  if (Object.prototype.hasOwnProperty.call(body, "discord_user_id")) {
+    updates.push("discord_user_id = ?");
+    binds.push(body.discord_user_id ? String(body.discord_user_id).trim() : null);
+  }
   if (!updates.length) return badRequest("No updatable fields provided");
 
   binds.push(params.id);

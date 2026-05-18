@@ -99,6 +99,24 @@ export const apiAdminResetPassword = (userId) =>
 export const apiAdminSetInLeague = (userId, inLeague) =>
   jsonFetch(`/api/admin/users/${userId}/league`, { method: "POST", body: { in_league: inLeague } });
 
+// Weekend predictions
+export const apiAdminWeekendScore = (weekendDate) =>
+  jsonFetch("/api/admin/weekend/score" + (weekendDate ? `?weekend_date=${weekendDate}` : ""));
+export const apiAdminScoreMovie = (weekendDate, tmdbId, actualGross) =>
+  jsonFetch("/api/admin/weekend/score", {
+    method: "POST",
+    body: { weekend_date: weekendDate, tmdb_id: tmdbId, actual_gross: actualGross },
+  });
+export const apiAdminWeekendMovies = (weekendDate) =>
+  jsonFetch("/api/admin/weekend/movies" + (weekendDate ? `?weekend_date=${weekendDate}` : ""));
+export const apiAdminSetWeekendMovies = (weekendDate, tmdbIds) =>
+  jsonFetch("/api/admin/weekend/movies", {
+    method: "POST",
+    body: { weekend_date: weekendDate, tmdb_ids: tmdbIds },
+  });
+export const apiAdminPostWeekendAnnouncement = () =>
+  jsonFetch("/api/admin/weekend/announce", { method: "POST", body: {} });
+
 // Self-service
 export const apiUpdateMyProfile = (username) =>
   jsonFetch("/api/me/profile", { method: "POST", body: { username } });

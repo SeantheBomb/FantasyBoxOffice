@@ -10,6 +10,8 @@ import {
   apiAdminSetBudget,
   apiAuctions, apiAdminEditAuction, apiAdminDeleteAuction,
   apiGameCatalog,
+  apiAdminWeekendScore, apiAdminScoreMovie,
+  apiAdminSetWeekendMovies, apiAdminPostWeekendAnnouncement,
 } from "../api";
 import { useUser } from "../useUser";
 
@@ -22,6 +24,7 @@ export default function Admin() {
     <div>
       <h1>Admin</h1>
       <UpdatesPanel />
+      <WeekendPanel />
       <AddMoviePanel />
       <RecordAuctionPanel />
       <RevokeMoviePanel />
@@ -435,7 +438,12 @@ function UsersPanel() {
     if (username == null) return;
     const email = window.prompt("Email", u.email);
     if (email == null) return;
-    const r = await apiAdminUpdateProfile(u.id, { username, email });
+    const discordUserId = window.prompt(
+      "Discord User ID (right-click user in Discord → Copy User ID)\nLeave blank to clear.",
+      u.discord_user_id || ""
+    );
+    if (discordUserId == null) return;
+    const r = await apiAdminUpdateProfile(u.id, { username, email, discord_user_id: discordUserId || null });
     if (!r.ok) return alert(r.data?.error);
     reload();
   }
@@ -469,6 +477,7 @@ function UsersPanel() {
                 <th style={th}>Email</th>
                 <th style={thRight}>Points</th>
                 <th style={thRight}>Owned</th>
+                <th style={th}>Discord ID</th>
                 <th style={th}>Admin</th>
                 <th style={th}>In League</th>
                 <th></th>
@@ -482,6 +491,7 @@ function UsersPanel() {
                   <td style={td}>{u.email}</td>
                   <td style={tdRight}>{u.points_remaining}</td>
                   <td style={tdRight}>{u.owned_count}</td>
+                  <td style={td}>{u.discord_user_id ? <code style={{ fontSize: 11 }}>{u.discord_user_id}</code> : <span style={{ color: "var(--fbo-text-muted)" }}>—</span>}</td>
                   <td style={td}>{u.is_admin ? "yes" : "no"}</td>
                   <td style={td}>{u.in_league ? "yes" : "no"}</td>
                   <td style={{ ...td, whiteSpace: "nowrap" }}>
@@ -720,6 +730,247 @@ function ManualDailyPanel() {
         <button type="submit">Save</button>
         {msg && <span style={{ color: "#666" }}>{msg}</span>}
       </form>
+    </section>
+  );
+}
+
+function WeekendPanel() {
+  const [data, setData] = useState(null);
+  const [version, setVersion] = useState(0);
+  const [announcing, setAnnouncing] = useState(false);
+  const [announceMsg, setAnnounceMsg] = useState(null);
+  const [scoreInputs, setScoreInputs] = useState({});
+  const [scoreBusy, setScoreBusy] = useState({});
+  const [scoreResults, setScoreResults] = useState({});
+
+  // Lineup config state
+  const [configDate, setConfigDate] = useState("");
+  const [movieQuery, setMovieQuery] = useState("");
+  const [catalog, setCatalog] = useState(null);
+  const [lineupIds, setLineupIds] = useState([]);
+  const [lineupBusy, setLineupBusy] = useState(false);
+  const [lineupMsg, setLineupMsg] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiAdminWeekendScore().then((r) => {
+      if (cancelled) return;
+      if (r.ok) {
+        setData(r.data);
+        if (r.data.weekend_date) setConfigDate(r.data.weekend_date);
+        if (r.data.movies) setLineupIds(r.data.movies.map((m) => m.tmdb_id));
+      }
+    });
+    apiGameCatalog({ status: "all", owner: "any" }).then((r) => {
+      if (!cancelled && r.ok) setCatalog(r.data.movies);
+    });
+    return () => { cancelled = true; };
+  }, [version]);
+
+  const catalogMatches = useMemo(() => {
+    if (!catalog) return [];
+    const q = movieQuery.trim().toLowerCase();
+    const inLineup = new Set(lineupIds);
+    const filtered = catalog.filter((m) => !inLineup.has(m.tmdb_id));
+    if (!q) return filtered.slice(0, 40);
+    return filtered.filter((m) => m.title.toLowerCase().includes(q)).slice(0, 40);
+  }, [catalog, movieQuery, lineupIds]);
+
+  const lineupMovies = useMemo(() => {
+    if (!catalog) return lineupIds.map((id) => ({ tmdb_id: id, title: String(id) }));
+    const byId = Object.fromEntries(catalog.map((m) => [m.tmdb_id, m]));
+    return lineupIds.map((id) => byId[id] || { tmdb_id: id, title: String(id) });
+  }, [catalog, lineupIds]);
+
+  async function saveLineup() {
+    if (!configDate || !lineupIds.length) return;
+    setLineupBusy(true);
+    setLineupMsg(null);
+    const r = await apiAdminSetWeekendMovies(configDate, lineupIds);
+    setLineupBusy(false);
+    setLineupMsg(r.ok ? { ok: true, text: `Saved ${lineupIds.length} movies for ${configDate}` } : { error: r.data?.error || "Failed" });
+    if (r.ok) setVersion((v) => v + 1);
+  }
+
+  async function announce() {
+    setAnnouncing(true);
+    setAnnounceMsg(null);
+    const r = await apiAdminPostWeekendAnnouncement();
+    setAnnouncing(false);
+    setAnnounceMsg(r.ok ? { ok: true, text: "Posted to #movie-chat" } : { error: r.data?.error || "Failed" });
+  }
+
+  async function scoreMovie(tmdbId) {
+    const raw = scoreInputs[tmdbId] || "";
+    const gross = Number(raw.replace(/[$,\s]/g, ""));
+    if (!gross || gross <= 0) return;
+    setScoreBusy((b) => ({ ...b, [tmdbId]: true }));
+    const r = await apiAdminScoreMovie(data.weekend_date, tmdbId, gross);
+    setScoreBusy((b) => ({ ...b, [tmdbId]: false }));
+    if (r.ok) {
+      setScoreResults((s) => ({ ...s, [tmdbId]: { ok: true, data: r.data } }));
+      setVersion((v) => v + 1);
+    } else {
+      setScoreResults((s) => ({ ...s, [tmdbId]: { error: r.data?.error || "Failed" } }));
+    }
+  }
+
+  const movies = data?.movies || [];
+  const picks = data?.picks || {};
+  const abstentions = data?.abstentions || {};
+
+  return (
+    <section style={card}>
+      <h3>Weekend Predictions</h3>
+
+      {/* Lineup configuration */}
+      <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #eee" }}>
+        <h4 style={{ marginTop: 0, marginBottom: 8 }}>Configure lineup</h4>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
+          <label>
+            Weekend date{" "}
+            <input
+              type="date"
+              value={configDate}
+              onChange={(e) => setConfigDate(e.target.value)}
+              style={{ marginLeft: 4 }}
+            />
+          </label>
+        </div>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 300px" }}>
+            <input
+              placeholder="Search catalog to add a movie..."
+              value={movieQuery}
+              onChange={(e) => setMovieQuery(e.target.value)}
+              style={{ width: "100%", marginBottom: 4 }}
+            />
+            {catalogMatches.length > 0 && (
+              <div style={{ maxHeight: 160, overflow: "auto", border: "1px solid var(--fbo-border)", borderRadius: 4 }}>
+                {catalogMatches.map((m) => (
+                  <div
+                    key={m.tmdb_id}
+                    onClick={() => { setLineupIds((ids) => [...ids, m.tmdb_id]); setMovieQuery(""); }}
+                    style={{ padding: "5px 8px", cursor: "pointer", borderBottom: "1px solid var(--fbo-border)", fontSize: 13 }}
+                  >
+                    <b>{m.title}</b> <span style={{ color: "var(--fbo-text-muted)" }}>{m.release_date}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div style={{ flex: "1 1 200px" }}>
+            <div style={{ fontSize: 13, color: "#666", marginBottom: 4 }}>Current lineup:</div>
+            {lineupMovies.length === 0 ? (
+              <div style={{ fontSize: 13, color: "var(--fbo-text-muted)" }}>No movies added.</div>
+            ) : lineupMovies.map((m) => (
+              <div key={m.tmdb_id} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4, fontSize: 13 }}>
+                <span style={{ flex: 1 }}>{m.title || m.tmdb_id}</span>
+                <button
+                  style={{ fontSize: 11, padding: "1px 6px" }}
+                  onClick={() => setLineupIds((ids) => ids.filter((id) => id !== m.tmdb_id))}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+          <button onClick={saveLineup} disabled={lineupBusy || !configDate || !lineupIds.length}>
+            {lineupBusy ? "Saving..." : "Save lineup"}
+          </button>
+          <button onClick={announce} disabled={announcing}>
+            {announcing ? "Posting..." : "Post announcement to #movie-chat"}
+          </button>
+          {lineupMsg?.ok && <span style={{ color: "var(--fbo-success)", fontSize: 13 }}>{lineupMsg.text}</span>}
+          {lineupMsg?.error && <span style={{ color: "var(--fbo-danger)", fontSize: 13 }}>{lineupMsg.error}</span>}
+          {announceMsg?.ok && <span style={{ color: "var(--fbo-success)", fontSize: 13 }}>{announceMsg.text}</span>}
+          {announceMsg?.error && <span style={{ color: "var(--fbo-danger)", fontSize: 13 }}>{announceMsg.error}</span>}
+        </div>
+      </div>
+
+      {/* Picks & scoring per movie */}
+      {!data ? (
+        <div>Loading...</div>
+      ) : movies.length === 0 ? (
+        <div style={{ color: "var(--fbo-text-muted)", fontSize: 13 }}>No movies in the active weekend lineup.</div>
+      ) : movies.map((m) => {
+        const moviePicks = picks[m.tmdb_id] || [];
+        const movieAbstentions = abstentions[m.tmdb_id] || [];
+        const scored = scoreResults[m.tmdb_id];
+        const isScored = m.actual_gross != null;
+
+        return (
+          <div key={m.tmdb_id} style={{ marginBottom: 20, paddingBottom: 20, borderBottom: "1px solid #f0f0f0" }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap", marginBottom: 6 }}>
+              <strong>{m.title}</strong>
+              <span style={{ fontSize: 12, color: "var(--fbo-text-muted)" }}>owned by {m.owner}</span>
+              {isScored && (
+                <span style={{ fontSize: 12, color: "var(--fbo-success)" }}>
+                  ✓ Scored — actual: ${(m.actual_gross / 1e6).toFixed(1)}M
+                </span>
+              )}
+            </div>
+
+            {moviePicks.length === 0 && movieAbstentions.length === 0 ? (
+              <div style={{ fontSize: 13, color: "var(--fbo-text-muted)", marginBottom: 8 }}>No picks yet.</div>
+            ) : (
+              <div className="fbo-scroll-x" style={{ marginBottom: 8 }}>
+                <table style={{ ...tbl, fontSize: 13 }}>
+                  <thead>
+                    <tr style={thRow}>
+                      <th style={th}>Player</th>
+                      <th style={thRight}>Estimate</th>
+                      {isScored && <th style={thRight}>Off by</th>}
+                      {isScored && <th style={thRight}>Pts</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {moviePicks.map((p) => (
+                      <tr key={p.discord_user_id} style={{ borderTop: "1px solid #f0f0f0" }}>
+                        <td style={td}>{p.fbo_username || p.discord_username}</td>
+                        <td style={tdRight}>${(p.estimate / 1e6).toFixed(1)}M</td>
+                        {isScored && <td style={tdRight}>${(Math.abs(p.estimate - m.actual_gross) / 1e6).toFixed(1)}M</td>}
+                        {isScored && <td style={tdRight}>{p.points_awarded ?? "—"}</td>}
+                      </tr>
+                    ))}
+                    {movieAbstentions.map((u) => (
+                      <tr key={u.discord_user_id} style={{ borderTop: "1px solid #f0f0f0", color: "var(--fbo-text-muted)" }}>
+                        <td style={td}>{u.username} <em>(abstained)</em></td>
+                        <td style={tdRight}>—</td>
+                        {isScored && <td style={tdRight}>—</td>}
+                        {isScored && <td style={tdRight}>0</td>}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <label style={{ fontSize: 13 }}>
+                Actual gross ($){" "}
+                <input
+                  type="text"
+                  placeholder="e.g. 77000000"
+                  value={scoreInputs[m.tmdb_id] ?? (m.actual_gross ? String(m.actual_gross) : "")}
+                  onChange={(e) => setScoreInputs((s) => ({ ...s, [m.tmdb_id]: e.target.value }))}
+                  style={{ width: 130, marginLeft: 4 }}
+                />
+              </label>
+              <button
+                onClick={() => scoreMovie(m.tmdb_id)}
+                disabled={scoreBusy[m.tmdb_id] || !scoreInputs[m.tmdb_id]}
+              >
+                {scoreBusy[m.tmdb_id] ? "Scoring..." : isScored ? "Re-score & post" : "Score & post to #game-feed"}
+              </button>
+              {scored?.ok && <span style={{ color: "var(--fbo-success)", fontSize: 13 }}>Posted!</span>}
+              {scored?.error && <span style={{ color: "var(--fbo-danger)", fontSize: 13 }}>{scored.error}</span>}
+            </div>
+          </div>
+        );
+      })}
     </section>
   );
 }
