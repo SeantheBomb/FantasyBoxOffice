@@ -37,7 +37,7 @@ export async function onRequestGet({ request, env }) {
       .bind(weekendDate)
       .all(),
     env.DB.prepare(
-      `SELECT wp.discord_user_id, wp.discord_username, wp.tmdb_id, wp.estimate,
+      `SELECT wp.id, wp.discord_user_id, wp.discord_username, wp.tmdb_id, wp.estimate,
               wp.points_awarded, u.username AS fbo_username
        FROM weekend_picks wp
        LEFT JOIN users u ON u.discord_user_id = wp.discord_user_id

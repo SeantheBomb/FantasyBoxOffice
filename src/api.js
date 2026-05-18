@@ -118,6 +118,12 @@ export const apiAdminPostWeekendAnnouncement = () =>
   jsonFetch("/api/admin/weekend/announce", { method: "POST", body: {} });
 export const apiAdminPostLastCall = () =>
   jsonFetch("/api/admin/weekend/last-call", { method: "POST", body: {} });
+export const apiAdminUpdatePick = (id, estimate) =>
+  jsonFetch("/api/admin/weekend/picks", { method: "PATCH", body: { id, estimate } });
+export const apiAdminDeletePick = (id) =>
+  jsonFetch("/api/admin/weekend/picks", { method: "DELETE", body: { id } });
+export const apiAdminCreatePick = (pick) =>
+  jsonFetch("/api/admin/weekend/picks", { method: "POST", body: pick });
 
 // Self-service
 export const apiUpdateMyProfile = (username) =>

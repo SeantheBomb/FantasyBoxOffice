@@ -12,6 +12,7 @@ import {
   apiGameCatalog,
   apiAdminWeekendScore, apiAdminScoreMovie,
   apiAdminSetWeekendMovies, apiAdminPostWeekendAnnouncement, apiAdminPostLastCall,
+  apiAdminUpdatePick, apiAdminDeletePick, apiAdminCreatePick,
 } from "../api";
 import { useUser } from "../useUser";
 
@@ -744,6 +745,9 @@ function WeekendPanel() {
   const [scoreInputs, setScoreInputs] = useState({});
   const [scoreBusy, setScoreBusy] = useState({});
   const [scoreResults, setScoreResults] = useState({});
+  const [editingPick, setEditingPick] = useState(null); // { id, estimate (string) }
+  const [addingPick, setAddingPick] = useState(null);   // tmdb_id being added to
+  const [addPickForm, setAddPickForm] = useState({ discord_user_id: "", estimate: "" });
 
   // Lineup config state
   const [configDate, setConfigDate] = useState("");
@@ -810,6 +814,35 @@ function WeekendPanel() {
     setLastCallMsg(r.ok ? { ok: true, text: "Last-call posted to #movie-chat" } : { error: r.data?.error || "Failed" });
   }
 
+  async function savePick() {
+    if (!editingPick) return;
+    const est = Number(editingPick.estimate) * 1_000_000;
+    if (!est || est <= 0) return;
+    const r = await apiAdminUpdatePick(editingPick.id, est);
+    if (r.ok) { setEditingPick(null); setVersion((v) => v + 1); }
+    else alert(r.data?.error || "Failed to update");
+  }
+
+  async function deletePick(id) {
+    if (!window.confirm("Delete this pick?")) return;
+    const r = await apiAdminDeletePick(id);
+    if (r.ok) setVersion((v) => v + 1);
+    else alert(r.data?.error || "Failed to delete");
+  }
+
+  async function createPick(tmdbId) {
+    const est = Number(addPickForm.estimate) * 1_000_000;
+    if (!addPickForm.discord_user_id || !est || est <= 0) return;
+    const r = await apiAdminCreatePick({
+      discord_user_id: addPickForm.discord_user_id,
+      tmdb_id: tmdbId,
+      weekend_date: data.weekend_date,
+      estimate: est,
+    });
+    if (r.ok) { setAddingPick(null); setAddPickForm({ discord_user_id: "", estimate: "" }); setVersion((v) => v + 1); }
+    else alert(r.data?.error || "Failed to create");
+  }
+
   async function scoreMovie(tmdbId) {
     const raw = scoreInputs[tmdbId] || "";
     const gross = Number(raw.replace(/[$,\s]/g, ""));
@@ -828,6 +861,26 @@ function WeekendPanel() {
   const movies = data?.movies || [];
   const picks = data?.picks || {};
   const abstentions = data?.abstentions || {};
+  // All in-league users with Discord IDs — used for the "add pick" dropdown.
+  const leagueUsers = useMemo(() => {
+    if (!data) return [];
+    const seen = new Set();
+    const all = [];
+    for (const abs of Object.values(data.abstentions || {})) {
+      for (const u of abs) {
+        if (!seen.has(u.discord_user_id)) { seen.add(u.discord_user_id); all.push(u); }
+      }
+    }
+    for (const ps of Object.values(data.picks || {})) {
+      for (const p of ps) {
+        if (!seen.has(p.discord_user_id) && p.fbo_username) {
+          seen.add(p.discord_user_id);
+          all.push({ discord_user_id: p.discord_user_id, username: p.fbo_username });
+        }
+      }
+    }
+    return all.sort((a, b) => a.username.localeCompare(b.username));
+  }, [data]);
 
   return (
     <section style={card}>
@@ -928,40 +981,119 @@ function WeekendPanel() {
               )}
             </div>
 
-            {moviePicks.length === 0 && movieAbstentions.length === 0 ? (
-              <div style={{ fontSize: 13, color: "var(--fbo-text-muted)", marginBottom: 8 }}>No picks yet.</div>
-            ) : (
-              <div className="fbo-scroll-x" style={{ marginBottom: 8 }}>
-                <table style={{ ...tbl, fontSize: 13 }}>
-                  <thead>
-                    <tr style={thRow}>
-                      <th style={th}>Player</th>
-                      <th style={thRight}>Estimate</th>
-                      {isScored && <th style={thRight}>Off by</th>}
-                      {isScored && <th style={thRight}>Pts</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {moviePicks.map((p) => (
-                      <tr key={p.discord_user_id} style={{ borderTop: "1px solid #f0f0f0" }}>
+            <div className="fbo-scroll-x" style={{ marginBottom: 8 }}>
+              <table style={{ ...tbl, fontSize: 13 }}>
+                <thead>
+                  <tr style={thRow}>
+                    <th style={th}>Player</th>
+                    <th style={thRight}>Estimate</th>
+                    {isScored && <th style={thRight}>Off by</th>}
+                    {isScored && <th style={thRight}>Pts</th>}
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {moviePicks.map((p) => {
+                    const isEditing = editingPick?.id === p.id;
+                    return (
+                      <tr key={p.id} style={{ borderTop: "1px solid #f0f0f0" }}>
                         <td style={td}>{p.fbo_username || p.discord_username}</td>
-                        <td style={tdRight}>${(p.estimate / 1e6).toFixed(1)}M</td>
-                        {isScored && <td style={tdRight}>${(Math.abs(p.estimate - m.actual_gross) / 1e6).toFixed(1)}M</td>}
+                        <td style={tdRight}>
+                          {isEditing ? (
+                            <span style={{ display: "flex", gap: 4, justifyContent: "flex-end", alignItems: "center" }}>
+                              <input
+                                type="number"
+                                min={1}
+                                value={editingPick.estimate}
+                                onChange={(e) => setEditingPick((ep) => ({ ...ep, estimate: e.target.value }))}
+                                style={{ width: 60, textAlign: "right" }}
+                                autoFocus
+                              />
+                              <span style={{ fontSize: 11 }}>M</span>
+                            </span>
+                          ) : (
+                            `$${Math.round(p.estimate / 1e6)}M`
+                          )}
+                        </td>
+                        {isScored && <td style={tdRight}>${Math.round(Math.abs(p.estimate - m.actual_gross) / 1e6)}M</td>}
                         {isScored && <td style={tdRight}>{p.points_awarded ?? "—"}</td>}
+                        <td style={{ ...td, whiteSpace: "nowrap" }}>
+                          {isEditing ? (
+                            <>
+                              <button style={{ fontSize: 11 }} onClick={savePick}>Save</button>{" "}
+                              <button style={{ fontSize: 11 }} onClick={() => setEditingPick(null)}>Cancel</button>
+                            </>
+                          ) : (
+                            <>
+                              <button style={{ fontSize: 11 }} onClick={() => setEditingPick({ id: p.id, estimate: String(Math.round(p.estimate / 1e6)) })}>Edit</button>{" "}
+                              <button style={{ fontSize: 11, color: "var(--fbo-danger)" }} onClick={() => deletePick(p.id)}>Delete</button>
+                            </>
+                          )}
+                        </td>
                       </tr>
-                    ))}
-                    {movieAbstentions.map((u) => (
-                      <tr key={u.discord_user_id} style={{ borderTop: "1px solid #f0f0f0", color: "var(--fbo-text-muted)" }}>
-                        <td style={td}>{u.username} <em>(abstained)</em></td>
-                        <td style={tdRight}>—</td>
-                        {isScored && <td style={tdRight}>—</td>}
-                        {isScored && <td style={tdRight}>0</td>}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                    );
+                  })}
+                  {movieAbstentions.map((u) => (
+                    <tr key={u.discord_user_id} style={{ borderTop: "1px solid #f0f0f0", color: "var(--fbo-text-muted)" }}>
+                      <td style={td}>{u.username} <em>(no bet)</em></td>
+                      <td style={tdRight}>—</td>
+                      {isScored && <td style={tdRight}>—</td>}
+                      {isScored && <td style={tdRight}>0</td>}
+                      <td></td>
+                    </tr>
+                  ))}
+                  {moviePicks.length === 0 && movieAbstentions.length === 0 && (
+                    <tr>
+                      <td colSpan={isScored ? 5 : 3} style={{ ...td, color: "var(--fbo-text-muted)" }}>No picks yet.</td>
+                    </tr>
+                  )}
+                  {/* Add pick row */}
+                  {addingPick === m.tmdb_id ? (
+                    <tr style={{ borderTop: "1px solid #f0f0f0", background: "#fafafa" }}>
+                      <td style={td}>
+                        <select
+                          value={addPickForm.discord_user_id}
+                          onChange={(e) => setAddPickForm((f) => ({ ...f, discord_user_id: e.target.value }))}
+                          style={{ fontSize: 12 }}
+                        >
+                          <option value="">— player —</option>
+                          {(leagueUsers).map((u) => (
+                            <option key={u.discord_user_id} value={u.discord_user_id}>{u.username}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td style={tdRight}>
+                        <span style={{ display: "flex", gap: 4, justifyContent: "flex-end", alignItems: "center" }}>
+                          <input
+                            type="number"
+                            min={1}
+                            placeholder="45"
+                            value={addPickForm.estimate}
+                            onChange={(e) => setAddPickForm((f) => ({ ...f, estimate: e.target.value }))}
+                            style={{ width: 60, textAlign: "right" }}
+                          />
+                          <span style={{ fontSize: 11 }}>M</span>
+                        </span>
+                      </td>
+                      {isScored && <td></td>}
+                      {isScored && <td></td>}
+                      <td style={{ ...td, whiteSpace: "nowrap" }}>
+                        <button style={{ fontSize: 11 }} onClick={() => createPick(m.tmdb_id)}>Add</button>{" "}
+                        <button style={{ fontSize: 11 }} onClick={() => setAddingPick(null)}>Cancel</button>
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr style={{ borderTop: "1px solid #f0f0f0" }}>
+                      <td colSpan={isScored ? 5 : 3} style={td}>
+                        <button style={{ fontSize: 11 }} onClick={() => { setAddingPick(m.tmdb_id); setAddPickForm({ discord_user_id: "", estimate: "" }); }}>
+                          + Add pick
+                        </button>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
 
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <label style={{ fontSize: 13 }}>
