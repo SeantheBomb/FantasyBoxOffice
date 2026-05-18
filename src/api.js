@@ -116,6 +116,8 @@ export const apiAdminSetWeekendMovies = (weekendDate, tmdbIds) =>
   });
 export const apiAdminPostWeekendAnnouncement = () =>
   jsonFetch("/api/admin/weekend/announce", { method: "POST", body: {} });
+export const apiAdminPostLastCall = () =>
+  jsonFetch("/api/admin/weekend/last-call", { method: "POST", body: {} });
 
 // Self-service
 export const apiUpdateMyProfile = (username) =>

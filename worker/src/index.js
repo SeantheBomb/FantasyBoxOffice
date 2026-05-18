@@ -1,8 +1,9 @@
-// Fantasy Box Office cron worker. Runs four scheduled jobs:
+// Fantasy Box Office cron worker. Runs five scheduled jobs:
 //   0 9 * * *    — refresh TMDB movies (budget/poster/release)
 //   0 14 * * *   — scrape Box Office Mojo dailies for released movies
 //   * * * * *    — settle expired auctions
 //   0 14 * * MON — post the weekly standings recap to Discord (10 AM EDT)
+//   0 12 * * THU — last-call betting reminder in #movie-chat (8 AM EDT)
 //
 // Shares logic with the Pages Functions in ../../functions/api via relative imports.
 
@@ -10,6 +11,7 @@ import { refreshMovies, rollStatuses } from "../../functions/api/_tmdb.js";
 import { refreshDailies } from "../../functions/api/_boxoffice.js";
 import { settleExpiredAuctions } from "../../functions/api/_settlement.js";
 import { runStandingsPost } from "./standings-job.js";
+import { runLastCallPost } from "./last-call-job.js";
 
 const SEASON_FROM = "2026-01-01";
 const SEASON_TO = "2026-12-31";
@@ -25,6 +27,8 @@ export default {
       ctx.waitUntil(runSettleExpired(env));
     } else if (cron === "0 14 * * MON") {
       ctx.waitUntil(runStandingsPost(env));
+    } else if (cron === "0 12 * * THU") {
+      ctx.waitUntil(runLastCallPost(env));
     }
   },
 
@@ -40,7 +44,8 @@ export default {
     else if (job === "dailies") result = await runDailiesRefresh(env);
     else if (job === "settle") result = await runSettleExpired(env);
     else if (job === "standings") result = await runStandingsPost(env);
-    else return new Response("job must be movies|dailies|settle|standings", { status: 400 });
+    else if (job === "lastcall") result = await runLastCallPost(env);
+    else return new Response("job must be movies|dailies|settle|standings|lastcall", { status: 400 });
     return new Response(JSON.stringify(result), {
       headers: { "Content-Type": "application/json" },
     });

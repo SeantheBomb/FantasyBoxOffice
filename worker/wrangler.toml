@@ -1,4 +1,4 @@
-name = "fbo-cron"
+name = "fantasy-box-office-weekly-report"
 main = "src/index.js"
 compatibility_date = "2025-12-15"
 
@@ -11,11 +11,12 @@ database_id = "5cdc4ff3-adf8-4b63-a15a-9d9b8f125866"
 #   TMDB_TOKEN          — v4 bearer token for TMDB (movies + dailies jobs)
 #   DISCORD_WEBHOOK_URL — channel webhook for the weekly standings post
 
-# Daily 09:00 UTC  → movies refresh
-# Daily 14:00 UTC  → dailies refresh
-# Every minute     → settle expired auctions
-# Monday 14:00 UTC → post weekly standings to Discord (10 AM EDT / 9 AM EST).
-#   Use the named "MON" — Cloudflare's numeric day-of-week is 1=Sunday,
-#   not POSIX-style 1=Monday, which silently posts a day early.
+# Daily 09:00 UTC    → movies refresh
+# Daily 14:00 UTC    → dailies refresh
+# Every minute       → settle expired auctions
+# Monday 14:00 UTC   → post weekly standings to Discord (10 AM EDT / 9 AM EST).
+# Thursday 12:00 UTC → last-call reminder in #movie-chat (8 AM EDT).
+#   Use named days (MON, THU) — Cloudflare's numeric DOW is 1=Sunday,
+#   not POSIX-style 1=Monday, which silently fires a day early.
 [triggers]
-crons = ["0 9 * * *", "0 14 * * *", "* * * * *", "0 14 * * MON"]
+crons = ["0 9 * * *", "0 14 * * *", "* * * * *", "0 14 * * MON", "0 12 * * THU"]

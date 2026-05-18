@@ -55,10 +55,12 @@ function ephemeral(content) {
 }
 
 async function getActiveWeekend(db) {
+  // Betting closes when the weekend arrives (movies hit theaters Friday).
+  // Use strict > so bets are locked out on release day itself.
   const row = await db
     .prepare(
       `SELECT DISTINCT weekend_date FROM weekend_movies
-       WHERE weekend_date >= date('now', '-3 days')
+       WHERE weekend_date > date('now')
        ORDER BY weekend_date ASC LIMIT 1`
     )
     .first();
@@ -111,7 +113,7 @@ export async function onRequestPost({ request, env }) {
     const tmdbId = parseInt(opts.movie, 10);
     const weekend = await getActiveWeekend(env.DB);
     if (!weekend) {
-      return ephemeral("No active weekend configured yet. Check back soon!");
+      return ephemeral("Betting is closed — movies are already in theaters or no upcoming weekend is configured. Check back Monday!");
     }
 
     const movie = await env.DB.prepare(

@@ -11,7 +11,7 @@ import {
   apiAuctions, apiAdminEditAuction, apiAdminDeleteAuction,
   apiGameCatalog,
   apiAdminWeekendScore, apiAdminScoreMovie,
-  apiAdminSetWeekendMovies, apiAdminPostWeekendAnnouncement,
+  apiAdminSetWeekendMovies, apiAdminPostWeekendAnnouncement, apiAdminPostLastCall,
 } from "../api";
 import { useUser } from "../useUser";
 
@@ -739,6 +739,8 @@ function WeekendPanel() {
   const [version, setVersion] = useState(0);
   const [announcing, setAnnouncing] = useState(false);
   const [announceMsg, setAnnounceMsg] = useState(null);
+  const [lastCalling, setLastCalling] = useState(false);
+  const [lastCallMsg, setLastCallMsg] = useState(null);
   const [scoreInputs, setScoreInputs] = useState({});
   const [scoreBusy, setScoreBusy] = useState({});
   const [scoreResults, setScoreResults] = useState({});
@@ -798,6 +800,14 @@ function WeekendPanel() {
     const r = await apiAdminPostWeekendAnnouncement();
     setAnnouncing(false);
     setAnnounceMsg(r.ok ? { ok: true, text: "Posted to #movie-chat" } : { error: r.data?.error || "Failed" });
+  }
+
+  async function lastCall() {
+    setLastCalling(true);
+    setLastCallMsg(null);
+    const r = await apiAdminPostLastCall();
+    setLastCalling(false);
+    setLastCallMsg(r.ok ? { ok: true, text: "Last-call posted to #movie-chat" } : { error: r.data?.error || "Failed" });
   }
 
   async function scoreMovie(tmdbId) {
@@ -883,10 +893,15 @@ function WeekendPanel() {
           <button onClick={announce} disabled={announcing}>
             {announcing ? "Posting..." : "Post announcement to #movie-chat"}
           </button>
+          <button onClick={lastCall} disabled={lastCalling}>
+            {lastCalling ? "Posting..." : "Post last-call to #movie-chat"}
+          </button>
           {lineupMsg?.ok && <span style={{ color: "var(--fbo-success)", fontSize: 13 }}>{lineupMsg.text}</span>}
           {lineupMsg?.error && <span style={{ color: "var(--fbo-danger)", fontSize: 13 }}>{lineupMsg.error}</span>}
           {announceMsg?.ok && <span style={{ color: "var(--fbo-success)", fontSize: 13 }}>{announceMsg.text}</span>}
           {announceMsg?.error && <span style={{ color: "var(--fbo-danger)", fontSize: 13 }}>{announceMsg.error}</span>}
+          {lastCallMsg?.ok && <span style={{ color: "var(--fbo-success)", fontSize: 13 }}>{lastCallMsg.text}</span>}
+          {lastCallMsg?.error && <span style={{ color: "var(--fbo-danger)", fontSize: 13 }}>{lastCallMsg.error}</span>}
         </div>
       </div>
 
