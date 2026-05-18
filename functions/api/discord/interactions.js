@@ -208,8 +208,8 @@ export async function onRequestPost({ request, env }) {
         .bind(discordUser.id, discordUser.global_name ?? discordUser.username, tmdbId, estimate, weekend)
         .run();
 
-      if (env.DISCORD_MOVIE_CHAT_WEBHOOK_URL) {
-        await fetch(env.DISCORD_MOVIE_CHAT_WEBHOOK_URL, {
+      if (env.DISCORD_GAME_FEED_WEBHOOK_URL) {
+        await fetch(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

@@ -68,7 +68,7 @@ export async function runStandingsPost(env) {
   await postToWebhook(env.DISCORD_WEBHOOK_URL, { messages, pngBytes });
 
   let announcementResult = null;
-  if (env.DISCORD_MOVIE_CHAT_WEBHOOK_URL) {
+  if (env.DISCORD_GAME_FEED_WEBHOOK_URL) {
     try {
       const { results: weekendMovies } = await env.DB.prepare(
         `SELECT m.tmdb_id, m.title, m.poster_url, u.username AS owner, wm.weekend_date
@@ -80,7 +80,7 @@ export async function runStandingsPost(env) {
          ORDER BY m.title`
       ).all();
       if (weekendMovies.length) {
-        await postWeekendAnnouncement(env.DISCORD_MOVIE_CHAT_WEBHOOK_URL, {
+        await postWeekendAnnouncement(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
           weekendDate: weekendMovies[0].weekend_date,
           movies: weekendMovies,
         });

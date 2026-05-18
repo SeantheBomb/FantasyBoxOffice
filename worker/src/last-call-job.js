@@ -2,7 +2,7 @@
 // closes when movies hit theaters on Friday.
 
 export async function runLastCallPost(env) {
-  if (!env.DISCORD_MOVIE_CHAT_WEBHOOK_URL) return { error: "DISCORD_MOVIE_CHAT_WEBHOOK_URL missing" };
+  if (!env.DISCORD_GAME_FEED_WEBHOOK_URL) return { error: "DISCORD_GAME_FEED_WEBHOOK_URL missing" };
 
   const { results: movies } = await env.DB.prepare(
     `SELECT m.title, u.username AS owner
@@ -19,7 +19,7 @@ export async function runLastCallPost(env) {
   const list = movies.map((m) => `• **${m.title}** — owned by ${m.owner}`).join("\n");
   const content = `@everyone 📣 **Last call!** Betting closes when movies hit theaters **Friday**. Use \`/bet\` to lock in your picks before then!\n\n${list}`;
 
-  const res = await fetch(env.DISCORD_MOVIE_CHAT_WEBHOOK_URL, {
+  const res = await fetch(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ content }),
