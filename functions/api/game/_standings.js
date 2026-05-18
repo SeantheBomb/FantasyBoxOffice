@@ -23,6 +23,18 @@ export async function computeStandings(db) {
        ) last ON last.tmdb_id = d.tmdb_id AND last.max_date = d.date`
   ).all();
 
+  // Revenue snapshot from before the current week — used for the week-over-week
+  // delta shown in the Discord standings post.
+  const prevDailyQ = db.prepare(
+    `SELECT d.tmdb_id, d.domestic_revenue
+       FROM dailies d
+       JOIN (
+         SELECT tmdb_id, MAX(date) AS max_date FROM dailies
+           WHERE date < date('now', '-6 days')
+         GROUP BY tmdb_id
+       ) prev ON prev.tmdb_id = d.tmdb_id AND prev.max_date = d.date`
+  ).all();
+
   const moviesQ = db.prepare(
     `SELECT tmdb_id, title, budget, poster_url, release_date, status FROM movies`
   ).all();
@@ -31,13 +43,17 @@ export async function computeStandings(db) {
     `SELECT tmdb_id, owner_user_id, purchase_price, is_void FROM owned_movies`
   ).all();
 
-  const [users, latestDaily, movies, owned] = await Promise.all([
-    usersQ, latestDailyQ, moviesQ, ownedQ,
+  const [users, latestDaily, prevDaily, movies, owned] = await Promise.all([
+    usersQ, latestDailyQ, prevDailyQ, moviesQ, ownedQ,
   ]);
 
   const revenueByTmdb = new Map();
   for (const d of latestDaily.results || []) {
     revenueByTmdb.set(d.tmdb_id, d.domestic_revenue);
+  }
+  const prevRevenueByTmdb = new Map();
+  for (const d of prevDaily.results || []) {
+    prevRevenueByTmdb.set(d.tmdb_id, d.domestic_revenue);
   }
   const movieById = new Map();
   for (const m of movies.results || []) movieById.set(m.tmdb_id, m);
@@ -71,6 +87,7 @@ export async function computeStandings(db) {
       status: m.status,
       budget: m.budget,
       revenue,
+      prev_revenue: prevRevenueByTmdb.get(o.tmdb_id) ?? null,
       profit,
       purchase_price: o.purchase_price,
       is_void: !!o.is_void,

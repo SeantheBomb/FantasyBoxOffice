@@ -5,6 +5,7 @@
 import { computeStandings } from "../../functions/api/game/_standings.js";
 import { computeHistory } from "../../functions/api/game/_history.js";
 import { backfillDailies } from "../../functions/api/_boxoffice.js";
+import { refreshNewReleaseBudgets } from "../../functions/api/_tmdb.js";
 import {
   buildStandingsMarkdown,
   buildChartConfig,
@@ -32,6 +33,17 @@ export async function runStandingsPost(env) {
     dailiesResult = { skipped: "TMDB_TOKEN missing" };
   }
 
+  // Refresh production budgets for movies that opened this past weekend so
+  // their profit line uses the most current TMDB figure.
+  let budgetResult = null;
+  if (env.TMDB_TOKEN) {
+    try {
+      budgetResult = await refreshNewReleaseBudgets({ db: env.DB, token: env.TMDB_TOKEN });
+    } catch (e) {
+      budgetResult = { error: e.message || String(e) };
+    }
+  }
+
   const [standings, history] = await Promise.all([
     computeStandings(env.DB),
     computeHistory(env.DB, { season: "2026" }),
@@ -57,5 +69,6 @@ export async function runStandingsPost(env) {
     chart_bytes: pngBytes ? pngBytes.length : 0,
     chart_error: chartError,
     dailies: dailiesResult,
+    budgets: budgetResult,
   };
 }

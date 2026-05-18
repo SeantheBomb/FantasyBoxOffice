@@ -14,7 +14,12 @@ const PALETTE = [
 // entry is broken across messages.
 export function buildStandingsMarkdown(standings) {
   const users = standings.users || [];
-  const blocks = users.map((u, idx) => formatUserBlock(u, idx + 1));
+  // Compute the "new release" cutoff once: movies that released in the past
+  // 7 days are flagged as opening weekend debuts in the Discord post.
+  const today = new Date();
+  const newReleaseCutoff = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+    .toISOString().slice(0, 10);
+  const blocks = users.map((u, idx) => formatUserBlock(u, idx + 1, newReleaseCutoff));
   const chunks = [];
   let current = "";
   for (const block of blocks) {
@@ -28,15 +33,15 @@ export function buildStandingsMarkdown(standings) {
   return chunks.length ? chunks : ["_No players yet._"];
 }
 
-function formatUserBlock(user, place) {
+function formatUserBlock(user, place, newReleaseCutoff) {
   const header = `# ${user.username} => Total Profit = ${formatShort(user.total_profit)} *(${ordinalPlace(place)} Place)*`;
   // Skip unreleased movies — they have no revenue yet and just clutter the recap.
   const visible = (user.movies || []).filter((m) => m.status !== "unreleased");
-  const lines = visible.map(formatMovieLine);
+  const lines = visible.map((m) => formatMovieLine(m, newReleaseCutoff));
   return [header, ...lines].join("\n");
 }
 
-function formatMovieLine(m) {
+function formatMovieLine(m, newReleaseCutoff) {
   const revenue = formatShort(m.revenue || 0);
   const budget = formatShort(m.budget || 0);
   const profitNum = Number(m.profit) || 0;
@@ -52,8 +57,17 @@ function formatMovieLine(m) {
     // Out of theaters: plain title (no bold), trailing tag.
     return `* ${m.title} => ${revenue} - ${budget} = ${profitStr} *(Out of theaters)*`;
   }
-  // Released or unreleased and still in play.
-  return `* **${m.title}** => ${revenue} - ${budget} = ${profitStr}`;
+
+  // Determine the trailing tag: opening weekend debut vs week-over-week delta.
+  let tag = "";
+  if (newReleaseCutoff && m.release_date && m.release_date >= newReleaseCutoff) {
+    tag = " *(New Release!)*";
+  } else if (m.prev_revenue != null) {
+    const delta = (m.revenue || 0) - m.prev_revenue;
+    if (delta !== 0) tag = ` *(${delta >= 0 ? "+" : ""}${formatShort(delta)})*`;
+  }
+
+  return `* **${m.title}** => ${revenue} - ${budget} = ${profitStr}${tag}`;
 }
 
 const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -120,9 +134,7 @@ export function buildChartConfig(history) {
             callback: function(v) {
               var a = Math.abs(v), p = v < 0 ? '-$' : '$';
               if (a >= 1e9) return p + (a / 1e9).toFixed(1) + 'B';
-              if (a >= 1e6) return p + (a / 1e6).toFixed(0) + 'M';
-              if (a >= 1e3) return p + (a / 1e3).toFixed(0) + 'K';
-              return p + a;
+              return p + Math.round(a / 1e6) + 'M';
             }
           }
         }

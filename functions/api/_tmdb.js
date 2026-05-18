@@ -202,6 +202,40 @@ export async function backfillBudgets({ db, token, limit = 40 }) {
   return { checked: results?.length || 0, updated };
 }
 
+// Refresh TMDB budget for owned movies that released within the last 7 days.
+// Runs as part of the Monday Discord post so profit numbers reflect the most
+// up-to-date production budget at the time of a movie's opening weekend.
+export async function refreshNewReleaseBudgets({ db, token }) {
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const { results } = await db
+    .prepare(
+      `SELECT m.tmdb_id FROM movies m
+         WHERE m.status = 'released'
+           AND m.release_date >= ?
+           AND EXISTS (SELECT 1 FROM owned_movies o WHERE o.tmdb_id = m.tmdb_id AND o.is_void = 0)
+         LIMIT 20`
+    )
+    .bind(cutoff)
+    .all();
+
+  let updated = 0;
+  for (const row of results || []) {
+    try {
+      const detail = await getMovieDetail(row.tmdb_id, token);
+      if (detail?.budget) {
+        await db
+          .prepare(`UPDATE movies SET budget = ? WHERE tmdb_id = ?`)
+          .bind(detail.budget, row.tmdb_id)
+          .run();
+        updated += 1;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return { checked: results?.length || 0, updated };
+}
+
 // Roll movie status from unreleased → released (release_date <= today).
 // Does not flip to 'complete' here; that comes from the dailies job.
 export async function rollStatuses(db) {
