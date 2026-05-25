@@ -18,15 +18,11 @@ import { scoreMovie } from "../../functions/api/_weekend-scoring.js";
 export async function runStandingsPost(env) {
   if (!env.DISCORD_WEBHOOK_URL) return { error: "DISCORD_WEBHOOK_URL missing" };
 
-  // Auto-score last weekend's picks before posting standings.
-  const scoringResult = await autoScoreWeekendPicks(env);
-
-  // Backfill the full weekly BOM history for all tracked movies before
-  // computing standings. Unlike refreshDailies (today-only snapshot),
-  // backfillDailies scrapes BOM's cumulative weekly release tables and fills
-  // in every week's total — so even if the daily cron missed days, the chart
-  // and standings will reflect complete data. Tolerant of failures: a scraper
-  // hiccup shouldn't block the Discord post.
+  // Backfill BOM weekly history FIRST — auto-scoring depends on this data to
+  // get accurate opening weekend totals. Unlike the daily refreshDailies cron
+  // (which stores today's cumulative snapshot), backfillDailies fetches BOM's
+  // weekly release chart for every tracked movie, so the very first entry after
+  // weekend_date reflects the true opening weekend gross.
   let dailiesResult = null;
   if (env.TMDB_TOKEN) {
     try {
@@ -38,8 +34,10 @@ export async function runStandingsPost(env) {
     dailiesResult = { skipped: "TMDB_TOKEN missing" };
   }
 
-  // Refresh production budgets for movies that opened this past weekend so
-  // their profit line uses the most current TMDB figure.
+  // Auto-score last weekend's picks using the freshly-backfilled dailies.
+  const scoringResult = await autoScoreWeekendPicks(env);
+
+  // Refresh production budgets for movies that opened this past weekend.
   let budgetResult = null;
   if (env.TMDB_TOKEN) {
     try {
@@ -49,23 +47,36 @@ export async function runStandingsPost(env) {
     }
   }
 
-  const [standings, history] = await Promise.all([
-    computeStandings(env.DB),
-    computeHistory(env.DB, { season: "2026" }),
-  ]);
-
-  const messages = buildStandingsMarkdown(standings);
-  const config = buildChartConfig(history);
-
+  // Compute standings and post chart — wrapped so a failure here doesn't
+  // prevent the next-weekend announcement from going out.
+  let standingsPosted = false;
+  let standingsError = null;
   let pngBytes = null;
   let chartError = null;
+  let standingsUsers = 0;
+  let standingsMessages = 0;
   try {
-    pngBytes = await renderChartPng(config);
-  } catch (e) {
-    chartError = e.message || String(e);
-  }
+    const [standings, history] = await Promise.all([
+      computeStandings(env.DB),
+      computeHistory(env.DB, { season: "2026" }),
+    ]);
 
-  await postToWebhook(env.DISCORD_WEBHOOK_URL, { messages, pngBytes });
+    standingsUsers = standings.users.length;
+    const messages = buildStandingsMarkdown(standings);
+    standingsMessages = messages.length;
+    const config = buildChartConfig(history);
+
+    try {
+      pngBytes = await renderChartPng(config);
+    } catch (e) {
+      chartError = e.message || String(e);
+    }
+
+    await postToWebhook(env.DISCORD_WEBHOOK_URL, { messages, pngBytes });
+    standingsPosted = true;
+  } catch (e) {
+    standingsError = e.message || String(e);
+  }
 
   let announcementResult = null;
   if (env.DISCORD_GAME_FEED_WEBHOOK_URL) {
@@ -94,9 +105,10 @@ export async function runStandingsPost(env) {
   }
 
   return {
-    posted: true,
-    users: standings.users.length,
-    messages: messages.length,
+    posted: standingsPosted,
+    standings_error: standingsError,
+    users: standingsUsers,
+    messages: standingsMessages,
     chart_bytes: pngBytes ? pngBytes.length : 0,
     chart_error: chartError,
     dailies: dailiesResult,

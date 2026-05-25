@@ -40,11 +40,13 @@ export async function onRequestPost({ request, env }) {
   ).bind(discordId, body.tmdb_id, weekendDate).first();
   if (existing) return json({ error: "You already placed a bet on this movie" }, { status: 400 });
 
-  // No duplicate estimates
+  // No duplicate estimates — check both formats since older Discord picks may be stored as raw dollars.
   const dup = await env.DB.prepare(
     `SELECT discord_username FROM weekend_picks
-     WHERE tmdb_id = ? AND weekend_date = ? AND estimate = ? AND discord_user_id != ? LIMIT 1`
-  ).bind(body.tmdb_id, weekendDate, estimate, discordId).first();
+     WHERE tmdb_id = ? AND weekend_date = ?
+       AND (estimate = ? OR estimate = ?)
+       AND discord_user_id != ? LIMIT 1`
+  ).bind(body.tmdb_id, weekendDate, estimate, estimate * 1_000_000, discordId).first();
   if (dup) return json({ error: `${dup.discord_username} already bet $${estimate}M — pick a different amount` }, { status: 400 });
 
   await env.DB.prepare(

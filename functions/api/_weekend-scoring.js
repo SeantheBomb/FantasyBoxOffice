@@ -20,11 +20,16 @@ export async function scoreMovie(db, { tmdb_id, weekend_date, actual_gross }) {
     .bind(tmdb_id)
     .first();
 
+  // Normalize estimates to raw dollars for comparison — website stores integer
+  // millions (120 = $120M), Discord stored raw dollars in older picks
+  // (120000000 = $120M). The CASE WHEN handles both formats.
   const { results: picks } = await db
     .prepare(
       `SELECT discord_user_id, discord_username, estimate FROM weekend_picks
        WHERE tmdb_id = ? AND weekend_date = ?
-       ORDER BY ABS(estimate - ?) ASC`
+       ORDER BY ABS(
+         CASE WHEN estimate < 1000000 THEN estimate * 1000000 ELSE estimate END - ?
+       ) ASC`
     )
     .bind(tmdb_id, weekend_date, actual_gross)
     .all();
@@ -87,8 +92,9 @@ function buildPickLine(p, i, total) {
   const mention = `<@${p.discord_user_id}>`;
   const pts = p.points;
   const ptsStr = pts === 1 ? "earning 1 point" : pts > 0 ? `earning ${pts} points` : "earning no points";
-  if (i === 0) return `${mention} has 1st place betting ${formatShort(p.estimate)} ${ptsStr} (${total} total)`;
-  if (i === 1) return `${mention} has 2nd place with ${formatShort(p.estimate)} ${ptsStr} (${total} total)`;
-  if (i === 2) return `${mention} has 3rd place with ${formatShort(p.estimate)} ${ptsStr} (${total} total)`;
-  return `${mention} had last place with ${formatShort(p.estimate)} ${ptsStr} (${total} total)`;
+  const rawEstimate = p.estimate < 1_000_000 ? p.estimate * 1_000_000 : p.estimate;
+  if (i === 0) return `${mention} has 1st place betting ${formatShort(rawEstimate)} ${ptsStr} (${total} total)`;
+  if (i === 1) return `${mention} has 2nd place with ${formatShort(rawEstimate)} ${ptsStr} (${total} total)`;
+  if (i === 2) return `${mention} has 3rd place with ${formatShort(rawEstimate)} ${ptsStr} (${total} total)`;
+  return `${mention} had last place with ${formatShort(rawEstimate)} ${ptsStr} (${total} total)`;
 }

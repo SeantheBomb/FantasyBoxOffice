@@ -13,6 +13,7 @@ import {
   apiAdminWeekendScore, apiAdminScoreMovie,
   apiAdminSetWeekendMovies, apiAdminPostWeekendAnnouncement, apiAdminPostLastCall,
   apiAdminUpdatePick, apiAdminDeletePick, apiAdminCreatePick,
+  apiBettingHistory,
 } from "../api";
 import { useUser } from "../useUser";
 
@@ -26,6 +27,7 @@ export default function Admin() {
       <h1>Admin</h1>
       <UpdatesPanel />
       <WeekendPanel />
+      <PredictionPointsLog />
       <AddMoviePanel />
       <RecordAuctionPanel />
       <RevokeMoviePanel />
@@ -748,6 +750,7 @@ function WeekendPanel() {
   const [editingPick, setEditingPick] = useState(null); // { id, estimate (string) }
   const [addingPick, setAddingPick] = useState(null);   // tmdb_id being added to
   const [addPickForm, setAddPickForm] = useState({ discord_user_id: "", estimate: "" });
+  const [reviewDate, setReviewDate] = useState(""); // when set, loads a past weekend for audit/re-score
 
   // Lineup config state
   const [configDate, setConfigDate] = useState("");
@@ -759,19 +762,19 @@ function WeekendPanel() {
 
   useEffect(() => {
     let cancelled = false;
-    apiAdminWeekendScore().then((r) => {
+    apiAdminWeekendScore(reviewDate || undefined).then((r) => {
       if (cancelled) return;
       if (r.ok) {
         setData(r.data);
-        if (r.data.weekend_date) setConfigDate(r.data.weekend_date);
-        if (r.data.movies) setLineupIds(r.data.movies.map((m) => m.tmdb_id));
+        if (!reviewDate && r.data.weekend_date) setConfigDate(r.data.weekend_date);
+        if (!reviewDate && r.data.movies) setLineupIds(r.data.movies.map((m) => m.tmdb_id));
       }
     });
     apiGameCatalog({ status: "all", owner: "any" }).then((r) => {
       if (!cancelled && r.ok) setCatalog(r.data.movies);
     });
     return () => { cancelled = true; };
-  }, [version]);
+  }, [version, reviewDate]);
 
   const catalogMatches = useMemo(() => {
     if (!catalog) return [];
@@ -816,7 +819,7 @@ function WeekendPanel() {
 
   async function savePick() {
     if (!editingPick) return;
-    const est = Number(editingPick.estimate) * 1_000_000;
+    const est = Number(editingPick.estimate); // integer millions, e.g. 45 = $45M
     if (!est || est <= 0) return;
     const r = await apiAdminUpdatePick(editingPick.id, est);
     if (r.ok) { setEditingPick(null); setVersion((v) => v + 1); }
@@ -831,7 +834,7 @@ function WeekendPanel() {
   }
 
   async function createPick(tmdbId) {
-    const est = Number(addPickForm.estimate) * 1_000_000;
+    const est = Number(addPickForm.estimate); // integer millions, e.g. 45 = $45M
     if (!addPickForm.discord_user_id || !est || est <= 0) return;
     const r = await apiAdminCreatePick({
       discord_user_id: addPickForm.discord_user_id,
@@ -958,6 +961,30 @@ function WeekendPanel() {
         </div>
       </div>
 
+      {/* Audit past weekends — date picker to load any scored weekend for review/re-score */}
+      <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #eee" }}>
+        <h4 style={{ marginTop: 0, marginBottom: 8 }}>Picks &amp; Scoring</h4>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 13 }}>
+          <label>
+            Review past weekend{" "}
+            <input
+              type="date"
+              value={reviewDate}
+              onChange={(e) => { setReviewDate(e.target.value); setScoreInputs({}); setScoreResults({}); }}
+              style={{ marginLeft: 4 }}
+            />
+          </label>
+          {reviewDate && (
+            <button style={{ fontSize: 12 }} onClick={() => { setReviewDate(""); setScoreInputs({}); setScoreResults({}); }}>
+              ✕ Back to active
+            </button>
+          )}
+          {reviewDate && data?.weekend_date && (
+            <span style={{ color: "var(--fbo-text-muted)" }}>Showing {data.weekend_date}</span>
+          )}
+        </div>
+      </div>
+
       {/* Picks & scoring per movie */}
       {!data ? (
         <div>Loading...</div>
@@ -1012,10 +1039,11 @@ function WeekendPanel() {
                               <span style={{ fontSize: 11 }}>M</span>
                             </span>
                           ) : (
-                            `$${Math.round(p.estimate / 1e6)}M`
+                            // Handle both storage formats: integer millions (< 1M) and raw dollars
+                            p.estimate < 1_000_000 ? `$${p.estimate}M` : `$${Math.round(p.estimate / 1e6)}M`
                           )}
                         </td>
-                        {isScored && <td style={tdRight}>${Math.round(Math.abs(p.estimate - m.actual_gross) / 1e6)}M</td>}
+                        {isScored && <td style={tdRight}>${Math.round(Math.abs((p.estimate < 1_000_000 ? p.estimate * 1_000_000 : p.estimate) - m.actual_gross) / 1e6)}M</td>}
                         {isScored && <td style={tdRight}>{p.points_awarded ?? "—"}</td>}
                         <td style={{ ...td, whiteSpace: "nowrap" }}>
                           {isEditing ? (
@@ -1025,7 +1053,7 @@ function WeekendPanel() {
                             </>
                           ) : (
                             <>
-                              <button style={{ fontSize: 11 }} onClick={() => setEditingPick({ id: p.id, estimate: String(Math.round(p.estimate / 1e6)) })}>Edit</button>{" "}
+                              <button style={{ fontSize: 11 }} onClick={() => setEditingPick({ id: p.id, estimate: String(p.estimate < 1_000_000 ? p.estimate : Math.round(p.estimate / 1e6)) })}>Edit</button>{" "}
                               <button style={{ fontSize: 11, color: "var(--fbo-danger)" }} onClick={() => deletePick(p.id)}>Delete</button>
                             </>
                           )}
@@ -1118,6 +1146,138 @@ function WeekendPanel() {
           </div>
         );
       })}
+    </section>
+  );
+}
+
+// ── Prediction Points Log ────────────────────────────────────────────────────
+
+function fmtEst(v) {
+  return v < 1_000_000 ? `$${v}M` : `$${Math.round(v / 1_000_000)}M`;
+}
+
+function PredictionPointsLog() {
+  const [data, setData] = useState(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open || data) return;
+    apiBettingHistory().then((r) => { if (r.ok) setData(r.data); });
+  }, [open, data]);
+
+  // Build per-player totals from all scored weekends.
+  const playerTotals = useMemo(() => {
+    if (!data) return [];
+    const totals = {};
+    for (const w of data.weekends ?? []) {
+      for (const m of w.movies ?? []) {
+        for (const p of m.picks ?? []) {
+          if (p.points_awarded == null) continue;
+          if (!totals[p.discord_username]) totals[p.discord_username] = 0;
+          totals[p.discord_username] += p.points_awarded;
+        }
+      }
+    }
+    return Object.entries(totals).sort((a, b) => b[1] - a[1]);
+  }, [data]);
+
+  return (
+    <section style={card}>
+      <h3 style={{ marginTop: 0, cursor: "pointer" }} onClick={() => setOpen((o) => !o)}>
+        Prediction Points Log {open ? "▲" : "▼"}
+      </h3>
+      {open && (
+        <>
+          {!data ? (
+            <div>Loading...</div>
+          ) : (
+            <>
+              {/* Leaderboard */}
+              {playerTotals.length > 0 && (
+                <div style={{ marginBottom: 20 }}>
+                  <h4 style={{ marginTop: 0 }}>Total Prediction Points</h4>
+                  <table style={{ ...tbl, fontSize: 13 }}>
+                    <thead>
+                      <tr style={thRow}>
+                        <th style={th}>#</th>
+                        <th style={th}>Player</th>
+                        <th style={thRight}>Points</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {playerTotals.map(([name, pts], i) => (
+                        <tr key={name} style={{ borderTop: "1px solid #f0f0f0" }}>
+                          <td style={{ ...td, color: "var(--fbo-text-muted)" }}>{i + 1}</td>
+                          <td style={td}>{name}</td>
+                          <td style={tdRight}><strong>{pts}</strong></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Per-weekend detail */}
+              {(data.weekends ?? []).map((w) => (
+                <div key={w.weekend_date} style={{ marginBottom: 24 }}>
+                  <h4 style={{ marginTop: 0 }}>Opening Weekend — {w.weekend_date}</h4>
+                  {w.movies.map((m) => (
+                    <div key={m.tmdb_id} style={{ marginBottom: 12 }}>
+                      <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 14 }}>
+                        {m.title}
+                        {m.actual_gross != null && (
+                          <span style={{ fontWeight: 400, color: "var(--fbo-text-muted)", marginLeft: 8 }}>
+                            Actual: ${(m.actual_gross / 1e6).toFixed(1)}M
+                          </span>
+                        )}
+                      </div>
+                      {m.picks.length === 0 ? (
+                        <div style={{ fontSize: 12, color: "var(--fbo-text-muted)" }}>No picks.</div>
+                      ) : (
+                        <table style={{ ...tbl, fontSize: 12 }}>
+                          <thead>
+                            <tr style={thRow}>
+                              <th style={th}>Player</th>
+                              <th style={thRight}>Bet</th>
+                              {m.actual_gross != null && <th style={thRight}>Off by</th>}
+                              <th style={thRight}>Pts</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {m.picks.map((p, i) => {
+                              const rawEst = p.estimate < 1_000_000 ? p.estimate * 1_000_000 : p.estimate;
+                              const offBy = m.actual_gross != null
+                                ? Math.round(Math.abs(rawEst - m.actual_gross) / 1e6)
+                                : null;
+                              return (
+                                <tr key={i} style={{ borderTop: "1px solid #f0f0f0" }}>
+                                  <td style={td}>{p.discord_username}</td>
+                                  <td style={tdRight}>{fmtEst(p.estimate)}</td>
+                                  {m.actual_gross != null && (
+                                    <td style={{ ...tdRight, color: offBy === 0 ? "var(--fbo-success)" : undefined }}>
+                                      ${offBy}M
+                                    </td>
+                                  )}
+                                  <td style={{ ...tdRight, fontWeight: p.points_awarded > 0 ? 600 : 400 }}>
+                                    {p.points_awarded ?? "—"}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ))}
+              {(data.weekends ?? []).length === 0 && (
+                <div style={{ color: "var(--fbo-text-muted)", fontSize: 13 }}>No scored weekends yet.</div>
+              )}
+            </>
+          )}
+        </>
+      )}
     </section>
   );
 }

@@ -1,4 +1,3 @@
-import { formatShort } from "../_format.js";
 import { settleIfAllPassed } from "../_settlement.js";
 import {
   postAuctionStarted,
@@ -43,12 +42,13 @@ async function verifySignature(request) {
 
 function parseEstimate(input) {
   // Integer millions only: $45M or 45M. No decimals, no raw numbers.
+  // Returns integer millions (e.g., 45 for $45M) — consistent with website form.
   const s = (input || "").trim().replace(/[$,\s]/g, "").toUpperCase();
   const match = s.match(/^(\d+)M$/);
   if (!match) return null;
   const num = parseInt(match[1], 10);
   if (num <= 0) return null;
-  return num * 1_000_000;
+  return num;
 }
 
 function respond(data) {
@@ -186,16 +186,19 @@ export async function onRequestPost({ request, env }) {
         return ephemeral("That movie isn't in this weekend's lineup.");
       }
 
+      // Check both formats: existing picks may be raw dollars (old) or integer millions (new).
       const taken = await env.DB.prepare(
         `SELECT discord_username FROM weekend_picks
-         WHERE tmdb_id = ? AND weekend_date = ? AND estimate = ? AND discord_user_id != ?
+         WHERE tmdb_id = ? AND weekend_date = ?
+           AND (estimate = ? OR estimate = ?)
+           AND discord_user_id != ?
          LIMIT 1`
       )
-        .bind(tmdbId, weekend, estimate, discordUser.id)
+        .bind(tmdbId, weekend, estimate, estimate * 1_000_000, discordUser.id)
         .first();
       if (taken) {
         return ephemeral(
-          `**${formatShort(estimate)}** is already taken by another player — pick a different amount!`
+          `**$${estimate}M** is already taken by another player — pick a different amount!`
         );
       }
 
@@ -213,12 +216,12 @@ export async function onRequestPost({ request, env }) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            content: `🎲 <@${discordUser.id}> bet **${formatShort(estimate)}** on **${movie.title}**`,
+            content: `🎲 <@${discordUser.id}> bet **$${estimate}M** on **${movie.title}**`,
           }),
         }).catch(() => {});
       }
 
-      return ephemeral(`Bet locked in: **${movie.title}** — ${formatShort(estimate)}`);
+      return ephemeral(`Bet locked in: **${movie.title}** — $${estimate}M`);
     }
 
     // ── /auction ──────────────────────────────────────────────────────────────
