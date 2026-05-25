@@ -78,7 +78,8 @@ export async function onRequestPost({ request, env }) {
 
   const result = await scoreMovie(env.DB, body);
 
-  if (env.DISCORD_GAME_FEED_WEBHOOK_URL) {
+  const notify = body.notify !== false; // default true
+  if (notify && env.DISCORD_GAME_FEED_WEBHOOK_URL) {
     await fetch(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

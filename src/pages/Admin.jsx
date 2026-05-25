@@ -747,6 +747,7 @@ function WeekendPanel() {
   const [scoreInputs, setScoreInputs] = useState({});
   const [scoreBusy, setScoreBusy] = useState({});
   const [scoreResults, setScoreResults] = useState({});
+  const [scoreNotify, setScoreNotify] = useState({}); // per-movie "post to Discord" toggle
   const [editingPick, setEditingPick] = useState(null); // { id, estimate (string) }
   const [addingPick, setAddingPick] = useState(null);   // tmdb_id being added to
   const [addPickForm, setAddPickForm] = useState({ discord_user_id: "", estimate: "" });
@@ -848,10 +849,13 @@ function WeekendPanel() {
 
   async function scoreMovie(tmdbId) {
     const raw = scoreInputs[tmdbId] || "";
-    const gross = Number(raw.replace(/[$,\s]/g, ""));
-    if (!gross || gross <= 0) return;
+    // Input is in $M (e.g. "33" = $33M). Multiply by 1M for storage.
+    const millions = Number(raw.replace(/[$,M\s]/g, ""));
+    if (!millions || millions <= 0) return;
+    const gross = Math.round(millions) * 1_000_000;
+    const notify = scoreNotify[tmdbId] !== false; // default true
     setScoreBusy((b) => ({ ...b, [tmdbId]: true }));
-    const r = await apiAdminScoreMovie(data.weekend_date, tmdbId, gross);
+    const r = await apiAdminScoreMovie(data.weekend_date, tmdbId, gross, notify);
     setScoreBusy((b) => ({ ...b, [tmdbId]: false }));
     if (r.ok) {
       setScoreResults((s) => ({ ...s, [tmdbId]: { ok: true, data: r.data } }));
@@ -1003,7 +1007,7 @@ function WeekendPanel() {
               <span style={{ fontSize: 12, color: "var(--fbo-text-muted)" }}>owned by {m.owner}</span>
               {isScored && (
                 <span style={{ fontSize: 12, color: "var(--fbo-success)" }}>
-                  ✓ Scored — actual: ${(m.actual_gross / 1e6).toFixed(1)}M
+                  ✓ Scored — actual: ${Math.round(m.actual_gross / 1e6)}M
                 </span>
               )}
             </div>
@@ -1125,22 +1129,32 @@ function WeekendPanel() {
 
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <label style={{ fontSize: 13 }}>
-                Actual gross ($){" "}
+                Actual gross{" "}
                 <input
-                  type="text"
-                  placeholder="e.g. 77000000"
-                  value={scoreInputs[m.tmdb_id] ?? (m.actual_gross ? String(m.actual_gross) : "")}
+                  type="number"
+                  min={1}
+                  placeholder="e.g. 33"
+                  value={scoreInputs[m.tmdb_id] ?? (m.actual_gross ? String(Math.round(m.actual_gross / 1_000_000)) : "")}
                   onChange={(e) => setScoreInputs((s) => ({ ...s, [m.tmdb_id]: e.target.value }))}
-                  style={{ width: 130, marginLeft: 4 }}
+                  style={{ width: 80, marginLeft: 4, textAlign: "right" }}
                 />
+                <span style={{ fontSize: 12, marginLeft: 2 }}>$M</span>
+              </label>
+              <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 4 }}>
+                <input
+                  type="checkbox"
+                  checked={scoreNotify[m.tmdb_id] !== false}
+                  onChange={(e) => setScoreNotify((n) => ({ ...n, [m.tmdb_id]: e.target.checked }))}
+                />
+                Post to #game-feed
               </label>
               <button
                 onClick={() => scoreMovie(m.tmdb_id)}
                 disabled={scoreBusy[m.tmdb_id] || !scoreInputs[m.tmdb_id]}
               >
-                {scoreBusy[m.tmdb_id] ? "Scoring..." : isScored ? "Re-score & post" : "Score & post to #game-feed"}
+                {scoreBusy[m.tmdb_id] ? "Scoring..." : isScored ? "Re-score" : "Score"}
               </button>
-              {scored?.ok && <span style={{ color: "var(--fbo-success)", fontSize: 13 }}>Posted!</span>}
+              {scored?.ok && <span style={{ color: "var(--fbo-success)", fontSize: 13 }}>{scoreNotify[m.tmdb_id] !== false ? "Scored & posted!" : "Scored (silent)."}</span>}
               {scored?.error && <span style={{ color: "var(--fbo-danger)", fontSize: 13 }}>{scored.error}</span>}
             </div>
           </div>
@@ -1227,7 +1241,7 @@ function PredictionPointsLog() {
                         {m.title}
                         {m.actual_gross != null && (
                           <span style={{ fontWeight: 400, color: "var(--fbo-text-muted)", marginLeft: 8 }}>
-                            Actual: ${(m.actual_gross / 1e6).toFixed(1)}M
+                            Actual: ${Math.round(m.actual_gross / 1e6)}M
                           </span>
                         )}
                       </div>

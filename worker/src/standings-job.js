@@ -156,10 +156,13 @@ async function autoScoreWeekendPicks(env) {
     }
 
     try {
+      // Round to the nearest million — predictions are in whole millions and
+      // BOM figures aren't precise enough to warrant sub-million comparisons.
+      const actual_gross = Math.round(daily.domestic_revenue / 1_000_000) * 1_000_000;
       const result = await scoreMovie(env.DB, {
         tmdb_id: movie.tmdb_id,
         weekend_date: movie.weekend_date,
-        actual_gross: daily.domestic_revenue,
+        actual_gross,
       });
 
       await fetch(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
@@ -168,7 +171,7 @@ async function autoScoreWeekendPicks(env) {
         body: JSON.stringify({ content: result.content }),
       });
 
-      results.push({ tmdb_id: movie.tmdb_id, title: movie.title, actual_gross: daily.domestic_revenue });
+      results.push({ tmdb_id: movie.tmdb_id, title: movie.title, actual_gross });
     } catch (e) {
       results.push({ tmdb_id: movie.tmdb_id, title: movie.title, error: e.message || String(e) });
     }
