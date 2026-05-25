@@ -23,9 +23,12 @@ export async function scoreMovie(db, { tmdb_id, weekend_date, actual_gross }) {
   // Normalize estimates to raw dollars for comparison — website stores integer
   // millions (120 = $120M), Discord stored raw dollars in older picks
   // (120000000 = $120M). The CASE WHEN handles both formats.
+  // Also fetch old points_awarded so re-scoring can compute the correct delta.
   const { results: picks } = await db
     .prepare(
-      `SELECT discord_user_id, discord_username, estimate FROM weekend_picks
+      `SELECT discord_user_id, discord_username, estimate,
+              COALESCE(points_awarded, 0) AS old_points
+       FROM weekend_picks
        WHERE tmdb_id = ? AND weekend_date = ?
        ORDER BY ABS(
          CASE WHEN estimate < 1000000 THEN estimate * 1000000 ELSE estimate END - ?
@@ -46,16 +49,32 @@ export async function scoreMovie(db, { tmdb_id, weekend_date, actual_gross }) {
   const abstentions = leagueUsers.filter((u) => !pickerIds.has(u.discord_user_id));
 
   if (scored.length) {
-    await db.batch(
-      scored.map((p) =>
+    // Update picks scores and credit the net change to each user's point balance.
+    // Using a delta (new - old) so re-scoring correctly adjusts rather than
+    // double-counting: e.g. rescoring from 3→0 removes 3 pts from balance.
+    const pointsUpdates = scored
+      .map((p) => ({ discord_user_id: p.discord_user_id, delta: p.points - p.old_points }))
+      .filter((u) => u.delta !== 0);
+
+    await db.batch([
+      ...scored.map((p) =>
         db
           .prepare(
             `UPDATE weekend_picks SET points_awarded = ?
              WHERE discord_user_id = ? AND tmdb_id = ? AND weekend_date = ?`
           )
           .bind(p.points, p.discord_user_id, tmdb_id, weekend_date)
-      )
-    );
+      ),
+      ...pointsUpdates.map(({ discord_user_id, delta }) =>
+        discord_user_id.startsWith("fbo_")
+          ? db
+              .prepare(`UPDATE users SET points_remaining = points_remaining + ? WHERE id = ?`)
+              .bind(delta, parseInt(discord_user_id.slice(4), 10))
+          : db
+              .prepare(`UPDATE users SET points_remaining = points_remaining + ? WHERE discord_user_id = ?`)
+              .bind(delta, discord_user_id)
+      ),
+    ]);
   }
 
   const allIds = [

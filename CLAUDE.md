@@ -52,6 +52,16 @@ Key tables:
 - `auction_passes` — auction_id, user_id (composite key)
 - `dailies` — tmdb_id, date, domestic_revenue, source (`bom` | `bom-weekly` | `manual`), scraped_at
 
+## Points system
+
+`users.points_remaining` is the **one and only points pool** — it serves double duty:
+1. **Auction currency** — decremented when a player wins a movie auction.
+2. **Prediction earnings** — incremented when `scoreMovie()` awards points for weekend pick accuracy.
+
+There is no separate "prediction points" balance. Winning predictions directly funds auction bids.
+
+`scoreMovie()` in `functions/api/_weekend-scoring.js` uses a delta-based update so re-scoring is idempotent: it fetches `COALESCE(points_awarded, 0)` as `old_points` before updating, then applies `new_points - old_points` to `users.points_remaining`. Re-scoring the same result is a no-op; correcting a score adjusts the balance up or down by exactly the difference.
+
 ## Settlement model
 
 `functions/api/_settlement.js` has two paths:

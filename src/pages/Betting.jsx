@@ -18,9 +18,8 @@ function fmtGross(v) {
   return "$" + a.toLocaleString();
 }
 
-// Estimates are stored as integer millions (5 = $5M) by the Discord bot.
-// Admin-entered picks may have been stored as raw dollar amounts (5000000 = $5M).
-// Handle both: values ≥ 1M are treated as raw dollars; smaller values as millions.
+// Estimates are stored as integer millions. Legacy picks from before the
+// format was standardized may be raw dollars — handle both.
 function fmtEstimate(v) {
   return v >= 1_000_000 ? fmtGross(v) : `$${v}M`;
 }
@@ -53,8 +52,8 @@ function PicksTable({ picks, myPickDiscordId, actual_gross }) {
               <td style={{ padding: "2px 6px", fontWeight: isMe ? 700 : 400 }}>{p.discord_username}</td>
               <td style={{ padding: "2px 6px", textAlign: "right" }}>{fmtEstimate(p.estimate)}</td>
               {isScored && (
-                <td style={{ padding: "2px 6px", textAlign: "right", color: "#f5d27a" }}>
-                  {p.points_awarded != null ? `+${p.points_awarded} pts` : "—"}
+                <td style={{ padding: "2px 6px", textAlign: "right", color: p.points_awarded > 0 ? "#f5d27a" : "#888" }}>
+                  {p.points_awarded != null ? (p.points_awarded > 0 ? `+${p.points_awarded} pts` : "0 pts") : "—"}
                 </td>
               )}
             </tr>
@@ -241,7 +240,10 @@ export default function Betting() {
 
   return (
     <div style={{ maxWidth: 960, margin: "0 auto", padding: 16 }}>
-      <h1 style={{ marginTop: 0, marginBottom: 24, fontSize: 22, color: "#f5e8c0" }}>🎲 Weekend Predictions</h1>
+      <h1 style={{ marginTop: 0, marginBottom: 4, fontSize: 22, color: "#f5e8c0" }}>🎲 Weekend Predictions</h1>
+      <p style={{ marginTop: 0, marginBottom: 24, color: "#aaa", fontSize: 14 }}>
+        Predict each movie&apos;s opening weekend gross. Points earned here go directly into your auction budget.
+      </p>
 
       {current ? (
         <WeekendSection
