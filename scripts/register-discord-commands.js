@@ -74,6 +74,10 @@ const commands = [
     ],
   },
   {
+    name: "points",
+    description: "Show how many points each league player has remaining",
+  },
+  {
     name: "pass",
     description: "Pass on an active auction — you won't be able to bid on that movie again",
     options: [

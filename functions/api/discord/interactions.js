@@ -371,6 +371,27 @@ export async function onRequestPost({ request, env }) {
       return ephemeral(`Bid of **${amount} pt${amount !== 1 ? "s" : ""}** on **${auction.movie_title}** placed. Check #game-feed!`);
     }
 
+    // ── /points ───────────────────────────────────────────────────────────────
+    if (cmdName === "points") {
+      const { results } = await env.DB.prepare(
+        `SELECT username, points_remaining FROM users
+         WHERE in_league = 1
+         ORDER BY points_remaining DESC`
+      ).all();
+
+      if (!results.length) {
+        return respond({ type: 4, data: { content: "No league players found." } });
+      }
+
+      const lines = results.map(
+        (u, i) => `${i + 1}. **${u.username}** — ${u.points_remaining} pts`
+      );
+      return respond({
+        type: 4,
+        data: { content: `**Points remaining:**\n${lines.join("\n")}` },
+      });
+    }
+
     // ── /pass ─────────────────────────────────────────────────────────────────
     if (cmdName === "pass") {
       const opts = Object.fromEntries(
