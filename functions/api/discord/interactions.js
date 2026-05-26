@@ -102,13 +102,16 @@ export async function onRequestPost({ request, env }) {
     if (cmdName === "bet") {
       const weekend = await getActiveWeekend(env.DB);
       if (!weekend) return respond({ type: 8, data: { choices: [] } });
+      const focusedOption = interaction.data?.options?.find((o) => o.focused);
+      const typed = (focusedOption?.value || "").trim();
       const { results } = await env.DB.prepare(
         `SELECT m.tmdb_id, m.title FROM weekend_movies wm
          JOIN movies m ON m.tmdb_id = wm.tmdb_id
          WHERE wm.weekend_date = ?
-         ORDER BY m.title`
+           AND (? = '' OR LOWER(m.title) LIKE '%' || LOWER(?) || '%')
+         ORDER BY m.title LIMIT 25`
       )
-        .bind(weekend)
+        .bind(weekend, typed, typed)
         .all();
       return respond({
         type: 8,
@@ -117,14 +120,16 @@ export async function onRequestPost({ request, env }) {
     }
 
     if (cmdName === "auction") {
-      // Eligible: unreleased, not owned, no open auction already.
+      const focusedOption = interaction.data?.options?.find((o) => o.focused);
+      const typed = (focusedOption?.value || "").trim();
       const { results } = await env.DB.prepare(
         `SELECT m.tmdb_id, m.title FROM movies m
          WHERE m.status = 'unreleased'
+           AND (? = '' OR LOWER(m.title) LIKE '%' || LOWER(?) || '%')
            AND NOT EXISTS (SELECT 1 FROM owned_movies om WHERE om.tmdb_id = m.tmdb_id AND om.is_void = 0)
            AND NOT EXISTS (SELECT 1 FROM auctions a WHERE a.tmdb_id = m.tmdb_id AND a.status = 'open')
          ORDER BY m.title LIMIT 25`
-      ).all();
+      ).bind(typed, typed).all();
       return respond({
         type: 8,
         data: { choices: results.map((r) => ({ name: r.title, value: String(r.tmdb_id) })) },
