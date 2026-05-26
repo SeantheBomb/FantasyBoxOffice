@@ -324,7 +324,7 @@ export async function onRequestPost({ request, env }) {
       const amount = rawAmount != null ? Number(rawAmount) : auction.current_bid + 1;
       if (!Number.isInteger(amount) || amount < 1) return ephemeral("Bid must be a whole number ≥ 1.");
       if (amount <= auction.current_bid) {
-        return ephemeral(`Bid must be higher than the current bid of **${auction.current_bid} pt${auction.current_bid !== 1 ? "s" : ""}**.`);
+        return ephemeral(`The current bid is now **${auction.current_bid} pt${auction.current_bid !== 1 ? "s" : ""}** — bid at least **${auction.current_bid + 1}** to take the lead.`);
       }
       if ((leagueUser.points_remaining || 0) < amount) {
         return ephemeral(`Not enough points — you have **${leagueUser.points_remaining}** but the bid is **${amount}**.`);
