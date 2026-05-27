@@ -321,6 +321,14 @@ export async function onRequestPost({ request, env }) {
 
       // Default amount = current_bid + 1 if not provided.
       const rawAmount = opts.amount;
+
+      // Catch users typing "pass" in the amount field and redirect them.
+      if (rawAmount != null && /^pass/i.test(rawAmount.trim())) {
+        return ephemeral(
+          `To pass on **${auction.movie_title}**, use the \`/pass\` command instead — select the same movie from the autocomplete and you'll be opted out without placing a bid.`
+        );
+      }
+
       const amount = rawAmount != null ? Number(rawAmount) : auction.current_bid + 1;
       if (!Number.isInteger(amount) || amount < 1) return ephemeral("Bid must be a whole number ≥ 1.");
       if (amount <= auction.current_bid) {

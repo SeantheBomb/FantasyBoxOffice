@@ -66,10 +66,9 @@ const commands = [
       },
       {
         name: "amount",
-        description: "Points to bid (default: current bid + 1)",
-        type: 4, // INTEGER
+        description: "Points to bid (default: current bid + 1). Type 'pass' to learn how to pass.",
+        type: 3, // STRING — allows catching "pass" input and redirecting to /pass
         required: false,
-        min_value: 1,
       },
     ],
   },
