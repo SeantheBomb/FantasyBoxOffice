@@ -1,5 +1,5 @@
 export async function runLastCallPost(env) {
-  if (!env.DISCORD_GAME_FEED_WEBHOOK_URL) return { error: "DISCORD_GAME_FEED_WEBHOOK_URL missing" };
+  if (!env.DISCORD_WEBHOOK_URL) return { error: "DISCORD_WEBHOOK_URL missing" };
 
   const weekend = await env.DB.prepare(
     `SELECT MIN(weekend_date) as weekend_date FROM weekend_movies WHERE weekend_date > date('now')`
@@ -38,7 +38,7 @@ export async function runLastCallPost(env) {
   const list = movies.map((m) => `• **${m.title}**${m.owner ? ` — owned by ${m.owner}` : ""}`).join("\n");
   const content = `${mentions}\n📣 **Last call!** Betting closes when movies hit theaters **Friday**. Use \`/bet\` to lock in your picks!\n\n${list}`;
 
-  const res = await fetch(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
+  const res = await fetch(env.DISCORD_WEBHOOK_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ content }),

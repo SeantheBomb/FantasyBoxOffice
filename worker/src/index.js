@@ -72,9 +72,9 @@ async function runDailiesRefresh(env) {
 
 async function runSettleExpired(env) {
   const result = await settleExpiredAuctions(env.DB);
-  if (env.DISCORD_GAME_FEED_WEBHOOK_URL && result.settledAuctions?.length) {
+  if (env.DISCORD_WEBHOOK_URL && result.settledAuctions?.length) {
     for (const a of result.settledAuctions) {
-      await postAuctionSettled(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
+      await postAuctionSettled(env.DISCORD_WEBHOOK_URL, {
         movieTitle: a.movieTitle,
         posterUrl: a.posterUrl,
         releaseDate: a.releaseDate,

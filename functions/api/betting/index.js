@@ -55,11 +55,11 @@ export async function onRequestPost({ request, env }) {
   ).bind(discordId, user.username, body.tmdb_id, estimate, weekendDate).run();
 
   // Post to Discord if user has a linked Discord account
-  if (user.discord_user_id && env.DISCORD_GAME_FEED_WEBHOOK_URL) {
+  if (user.discord_user_id && env.DISCORD_WEBHOOK_URL) {
     const movie = await env.DB.prepare(`SELECT title FROM movies WHERE tmdb_id = ?`)
       .bind(body.tmdb_id).first();
     const content = `🎲 <@${user.discord_user_id}> bet **$${estimate}M** on **${movie?.title ?? "Unknown"}**`;
-    await fetch(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
+    await fetch(env.DISCORD_WEBHOOK_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content }),

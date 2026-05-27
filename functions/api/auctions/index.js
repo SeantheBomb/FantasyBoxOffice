@@ -73,7 +73,7 @@ export async function onRequestPost({ request, env }) {
     `INSERT INTO auction_bids (id, auction_id, user_id, amount, bid_at) VALUES (?, ?, ?, ?, ?)`
   ).bind(crypto.randomUUID(), id, user.id, startingBid, now).run();
 
-  await postAuctionStarted(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
+  await postAuctionStarted(env.DISCORD_WEBHOOK_URL, {
     movieTitle: movie.title,
     posterUrl: movie.poster_url,
     endsAt,

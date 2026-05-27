@@ -5,8 +5,8 @@ export async function onRequestPost({ request, env }) {
   const { user, response } = await requireAdmin(request, env);
   if (!user) return response;
 
-  if (!env.DISCORD_GAME_FEED_WEBHOOK_URL) {
-    return json({ error: "DISCORD_GAME_FEED_WEBHOOK_URL not set" }, { status: 400 });
+  if (!env.DISCORD_WEBHOOK_URL) {
+    return json({ error: "DISCORD_WEBHOOK_URL not set" }, { status: 400 });
   }
 
   const result = await runLastCallPost(env);

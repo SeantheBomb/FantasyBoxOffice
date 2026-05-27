@@ -79,7 +79,7 @@ export async function runStandingsPost(env) {
   }
 
   let announcementResult = null;
-  if (env.DISCORD_GAME_FEED_WEBHOOK_URL) {
+  if (env.DISCORD_WEBHOOK_URL) {
     try {
       const { results: weekendMovies } = await env.DB.prepare(
         `SELECT m.tmdb_id, m.title, m.poster_url, u.username AS owner, wm.weekend_date
@@ -91,7 +91,7 @@ export async function runStandingsPost(env) {
          ORDER BY m.title`
       ).all();
       if (weekendMovies.length) {
-        await postWeekendAnnouncement(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
+        await postWeekendAnnouncement(env.DISCORD_WEBHOOK_URL, {
           weekendDate: weekendMovies[0].weekend_date,
           movies: weekendMovies,
         });
@@ -119,7 +119,7 @@ export async function runStandingsPost(env) {
 }
 
 async function autoScoreWeekendPicks(env) {
-  if (!env.DISCORD_GAME_FEED_WEBHOOK_URL) return { skipped: "DISCORD_GAME_FEED_WEBHOOK_URL missing" };
+  if (!env.DISCORD_WEBHOOK_URL) return { skipped: "DISCORD_WEBHOOK_URL missing" };
 
   // Find movies from last weekend that haven't been scored yet.
   // On Monday, 'now - 3 days' = Friday, catching last weekend's lineup.
@@ -165,7 +165,7 @@ async function autoScoreWeekendPicks(env) {
         actual_gross,
       });
 
-      await fetch(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
+      await fetch(env.DISCORD_WEBHOOK_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: result.content }),

@@ -25,7 +25,7 @@ export async function onRequestPost({ request, env, params }) {
      ON CONFLICT(auction_id, user_id) DO NOTHING`
   ).bind(auction.id, user.id, new Date().toISOString()).run();
 
-  await postPassPlaced(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
+  await postPassPlaced(env.DISCORD_WEBHOOK_URL, {
     movieTitle: auction.movie_title,
     passerDiscordId: user.discord_user_id,
     passerUsername: user.username,
@@ -33,7 +33,7 @@ export async function onRequestPost({ request, env, params }) {
 
   const settleResult = await settleIfAllPassed(env.DB, auction.id);
   if (settleResult.settled) {
-    await postAuctionSettled(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
+    await postAuctionSettled(env.DISCORD_WEBHOOK_URL, {
       movieTitle: settleResult.movieTitle,
       posterUrl: settleResult.posterUrl,
       releaseDate: settleResult.releaseDate,

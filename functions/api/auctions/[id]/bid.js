@@ -53,7 +53,7 @@ export async function onRequestPost({ request, env, params }) {
     ).bind(auction.id, user.id),
   ]);
 
-  await postBidPlaced(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
+  await postBidPlaced(env.DISCORD_WEBHOOK_URL, {
     movieTitle: auction.movie_title,
     bidderDiscordId: user.discord_user_id,
     bidderUsername: user.username,
@@ -64,7 +64,7 @@ export async function onRequestPost({ request, env, params }) {
   // else passed against them — settle if so.
   const settleResult = await settleIfAllPassed(env.DB, auction.id);
   if (settleResult.settled) {
-    await postAuctionSettled(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
+    await postAuctionSettled(env.DISCORD_WEBHOOK_URL, {
       movieTitle: settleResult.movieTitle,
       posterUrl: settleResult.posterUrl,
       releaseDate: settleResult.releaseDate,
