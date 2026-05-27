@@ -8,7 +8,7 @@ import {
   apiAdminRecordAuction,
   apiAdminRevokeMovie,
   apiAdminSetBudget,
-  apiAuctions, apiAdminEditAuction, apiAdminDeleteAuction,
+  apiAuctions, apiAdminEditAuction, apiAdminDeleteAuction, apiAdminAuditAuction, apiAdminDeleteBid,
   apiGameCatalog,
   apiAdminWeekendScore, apiAdminScoreMovie,
   apiAdminSetWeekendMovies, apiAdminPostWeekendAnnouncement, apiAdminPostLastCall,
@@ -516,6 +516,7 @@ function UsersPanel() {
 
 function AuctionsPanel() {
   const [auctions, setAuctions] = useState(null);
+  const [auditId, setAuditId] = useState(null);
   const [version, setVersion] = useState(0);
   const reload = useCallback(() => setVersion((v) => v + 1), []);
 
@@ -528,17 +529,8 @@ function AuctionsPanel() {
     return () => { cancelled = true; };
   }, [version]);
 
-  async function edit(a) {
-    const raw = window.prompt("JSON patch (status/current_bid/current_bidder_id/ends_at)", JSON.stringify({}));
-    if (!raw) return;
-    let patch;
-    try { patch = JSON.parse(raw); } catch { return alert("invalid JSON"); }
-    const r = await apiAdminEditAuction(a.id, patch);
-    if (!r.ok) return alert(r.data?.error);
-    reload();
-  }
   async function del(a) {
-    if (!window.confirm(`Delete auction ${a.id}?`)) return;
+    if (!window.confirm(`Delete auction for ${a.title}?`)) return;
     const r = await apiAdminDeleteAuction(a.id);
     if (!r.ok) return alert(r.data?.error);
     reload();
@@ -548,37 +540,184 @@ function AuctionsPanel() {
     <section style={card}>
       <h3>Auctions</h3>
       {!auctions ? <div>Loading...</div> : (
-        <div className="fbo-scroll-x">
-          <table style={tbl}>
-            <thead>
-              <tr style={thRow}>
-                <th style={th}>Movie</th>
-                <th style={th}>Status</th>
-                <th style={thRight}>Bid</th>
-                <th style={th}>Bidder</th>
-                <th style={{ ...th, whiteSpace: "nowrap" }}>Ends</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {auctions.map((a) => (
-                <tr key={a.id} style={{ borderTop: "1px solid #f0f0f0" }}>
-                  <td style={td}>{a.title}</td>
-                  <td style={td}>{a.status}</td>
-                  <td style={tdRight}>{a.current_bid}</td>
-                  <td style={td}>{a.current_bidder_username}</td>
-                  <td style={{ ...td, whiteSpace: "nowrap" }}>{a.ends_at}</td>
-                  <td style={{ ...td, whiteSpace: "nowrap" }}>
-                    <button onClick={() => edit(a)}>Edit</button>{" "}
-                    <button onClick={() => del(a)}>Delete</button>
-                  </td>
+        <>
+          <div className="fbo-scroll-x">
+            <table style={tbl}>
+              <thead>
+                <tr style={thRow}>
+                  <th style={th}>Movie</th>
+                  <th style={th}>Status</th>
+                  <th style={thRight}>Bid</th>
+                  <th style={th}>Bidder</th>
+                  <th style={{ ...th, whiteSpace: "nowrap" }}>Ends</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {auctions.map((a) => (
+                  <tr key={a.id} style={{ borderTop: "1px solid #f0f0f0", background: auditId === a.id ? "#fffbe6" : undefined }}>
+                    <td style={td}>{a.title}</td>
+                    <td style={td}>{a.status}</td>
+                    <td style={tdRight}>{a.current_bid}</td>
+                    <td style={td}>{a.current_bidder_username}</td>
+                    <td style={{ ...td, whiteSpace: "nowrap" }}>{a.ends_at}</td>
+                    <td style={{ ...td, whiteSpace: "nowrap" }}>
+                      <button onClick={() => setAuditId(auditId === a.id ? null : a.id)}>
+                        {auditId === a.id ? "Close" : "Audit"}
+                      </button>{" "}
+                      <button onClick={() => del(a)}>Delete</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {auditId && (
+            <AuctionAuditView
+              auctionId={auditId}
+              onClose={() => setAuditId(null)}
+              onSaved={reload}
+            />
+          )}
+        </>
       )}
     </section>
+  );
+}
+
+function AuctionAuditView({ auctionId, onClose, onSaved }) {
+  const [data, setData] = useState(null);
+  const [users, setUsers] = useState(null);
+  const [version, setVersion] = useState(0);
+  const [patchBid, setPatchBid] = useState("");
+  const [patchBidder, setPatchBidder] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiAdminAuditAuction(auctionId).then((r) => {
+      if (!cancelled && r.ok) {
+        setData(r.data);
+        setPatchBid(String(r.data.auction.current_bid));
+        setPatchBidder(r.data.auction.current_bidder_id);
+      }
+    });
+    apiAdminUsers().then((r) => {
+      if (!cancelled && r.ok) setUsers(r.data.users);
+    });
+    return () => { cancelled = true; };
+  }, [auctionId, version]);
+
+  async function deleteBid(bid) {
+    if (!window.confirm(`Delete bid of ${bid.amount} pts by ${bid.username}?`)) return;
+    const r = await apiAdminDeleteBid(auctionId, bid.id);
+    if (!r.ok) return alert(r.data?.error || "Failed");
+    setVersion((v) => v + 1);
+    onSaved();
+  }
+
+  async function saveCorrection(e) {
+    e.preventDefault();
+    setMsg(null);
+    setBusy(true);
+    const r = await apiAdminEditAuction(auctionId, {
+      current_bid: Number(patchBid),
+      current_bidder_id: patchBidder,
+    });
+    setBusy(false);
+    if (r.ok) {
+      setMsg({ ok: "Corrected." });
+      setVersion((v) => v + 1);
+      onSaved();
+    } else {
+      setMsg({ error: r.data?.error || "Failed" });
+    }
+  }
+
+  if (!data) return <div style={{ padding: 12, color: "var(--fbo-text-muted)" }}>Loading bid history...</div>;
+  const { auction, bids, passes } = data;
+
+  return (
+    <div style={{ marginTop: 12, padding: 12, background: "#fffbe6", border: "1px solid #e8d84a", borderRadius: 6 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <strong style={{ fontSize: 14 }}>Bid history — {auction.title}</strong>
+        <button style={{ fontSize: 11 }} onClick={onClose}>Close ✕</button>
+      </div>
+
+      <div className="fbo-scroll-x">
+        <table style={{ ...tbl, fontSize: 13 }}>
+          <thead>
+            <tr style={thRow}>
+              <th style={th}>#</th>
+              <th style={th}>User</th>
+              <th style={thRight}>Pts</th>
+              <th style={th}>Time</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {bids.map((b, i) => (
+              <tr key={b.id} style={{ borderTop: "1px solid #f0f0f0" }}>
+                <td style={{ ...td, color: "var(--fbo-text-muted)", fontSize: 11 }}>{i + 1}</td>
+                <td style={td}>{b.username}</td>
+                <td style={tdRight}><b>{b.amount}</b></td>
+                <td style={{ ...td, fontSize: 12, color: "var(--fbo-text-muted)", whiteSpace: "nowrap" }}>
+                  {new Date(b.bid_at).toLocaleString()}
+                </td>
+                <td style={td}>
+                  <button
+                    style={{ fontSize: 11, color: "var(--fbo-danger)", border: "1px solid var(--fbo-danger)", background: "transparent", borderRadius: 3, padding: "1px 6px", cursor: "pointer" }}
+                    onClick={() => deleteBid(b)}
+                  >
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {bids.length === 0 && (
+              <tr><td colSpan={5} style={{ ...td, color: "var(--fbo-text-muted)" }}>No bids recorded.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {passes.length > 0 && (
+        <div style={{ marginTop: 6, fontSize: 12, color: "var(--fbo-text-muted)" }}>
+          Passes: {passes.map((p) => p.username).join(", ")}
+        </div>
+      )}
+
+      <form onSubmit={saveCorrection} style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", borderTop: "1px solid #e8d84a", paddingTop: 10 }}>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>Set correct state:</span>
+        <label style={{ fontSize: 13 }}>
+          Current bid{" "}
+          <input
+            type="number"
+            min={1}
+            value={patchBid}
+            onChange={(e) => setPatchBid(e.target.value)}
+            style={{ width: 70, marginLeft: 4 }}
+          />
+          {" "}pts
+        </label>
+        <label style={{ fontSize: 13 }}>
+          Current bidder{" "}
+          <select value={patchBidder} onChange={(e) => setPatchBidder(e.target.value)} style={{ minWidth: 140, marginLeft: 4 }}>
+            {users
+              ? users.filter((u) => u.in_league).map((u) => (
+                  <option key={u.id} value={u.id}>{u.username}</option>
+                ))
+              : <option>Loading…</option>}
+          </select>
+        </label>
+        <button type="submit" disabled={busy}>
+          {busy ? "Saving…" : "Save correction"}
+        </button>
+        {msg?.ok && <span style={{ color: "var(--fbo-success)", fontSize: 13 }}>{msg.ok}</span>}
+        {msg?.error && <span style={{ color: "var(--fbo-danger)", fontSize: 13 }}>{msg.error}</span>}
+      </form>
+    </div>
   );
 }
 

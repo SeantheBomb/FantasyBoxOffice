@@ -64,6 +64,10 @@ export const apiAdminEditAuction = (id, patch) =>
   jsonFetch(`/api/admin/auctions/${id}`, { method: "POST", body: patch });
 export const apiAdminDeleteAuction = (id) =>
   jsonFetch(`/api/admin/auctions/${id}`, { method: "DELETE" });
+export const apiAdminAuditAuction = (id) =>
+  jsonFetch(`/api/admin/auctions/${id}`);
+export const apiAdminDeleteBid = (auctionId, bidId) =>
+  jsonFetch(`/api/admin/auctions/${auctionId}/bids/${bidId}`, { method: "DELETE" });
 export const apiAdminRefreshMovies = (body = {}) =>
   jsonFetch("/api/admin/movies/refresh", { method: "POST", body });
 export const apiAdminAddMovie = (tmdbId) =>
