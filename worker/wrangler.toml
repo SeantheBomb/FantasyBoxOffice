@@ -8,8 +8,9 @@ database_name = "cf_auth_demo"
 database_id = "5cdc4ff3-adf8-4b63-a15a-9d9b8f125866"
 
 # Secrets (set via `wrangler secret put <NAME>`):
-#   TMDB_TOKEN          — v4 bearer token for TMDB (movies + dailies jobs)
-#   DISCORD_WEBHOOK_URL — channel webhook for the weekly standings post
+#   TMDB_TOKEN                   — v4 bearer token for TMDB (movies + dailies jobs)
+#   DISCORD_WEBHOOK_URL          — channel webhook for the weekly standings post
+#   DISCORD_GAME_FEED_WEBHOOK_URL — channel webhook for live game events (bids, passes, auctions, scoring)
 
 # Daily 09:00 UTC    → movies refresh
 # Daily 14:00 UTC    → dailies refresh
