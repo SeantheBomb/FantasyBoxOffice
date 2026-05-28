@@ -231,15 +231,39 @@ export async function postAuctionStarted(webhookUrl, { movieTitle, posterUrl, en
   }).catch(() => {});
 }
 
-export async function postBidPlaced(webhookUrl, { movieTitle, bidderDiscordId, bidderUsername, amount }) {
+export async function postBidPlaced(webhookUrl, { movieTitle, bidderDiscordId, bidderUsername, amount, endsAt }) {
   if (!webhookUrl) return;
   const who = bidderDiscordId ? `<@${bidderDiscordId}>` : `**${bidderUsername}**`;
+  const closeStr = endsAt ? ` — closes <t:${Math.floor(new Date(endsAt).getTime() / 1000)}:R>` : "";
   await fetch(webhookUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      content: `💰 ${who} bid **${amount} pt${amount !== 1 ? "s" : ""}** on **${movieTitle}**`,
+      content: `💰 ${who} bid **${amount} pt${amount !== 1 ? "s" : ""}** on **${movieTitle}**${closeStr}`,
     }),
+  }).catch(() => {});
+}
+
+export async function postAuctionClosingSoon(webhookUrl, { movieTitle, posterUrl, currentBid, currentBidderUsername, currentBidderDiscordId, endsAt }) {
+  if (!webhookUrl) return;
+  const unixSec = Math.floor(new Date(endsAt).getTime() / 1000);
+  const who = currentBidderDiscordId ? `<@${currentBidderDiscordId}>` : `**${currentBidderUsername}**`;
+  const embed = {
+    title: `⏰ Closing Soon: ${movieTitle}`,
+    description: [
+      `Current bid: **${currentBid} pt${currentBid !== 1 ? "s" : ""}** by ${who}`,
+      ``,
+      `**Closes:** <t:${unixSec}:F> (<t:${unixSec}:R>)`,
+      ``,
+      `Last chance — use \`/bid\` to raise the bid or \`/pass\` to opt out.`,
+    ].join("\n"),
+    color: 0xf59e0b,
+    ...(posterUrl ? { image: { url: posterUrl } } : {}),
+  };
+  await fetch(webhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content: "@everyone", embeds: [embed] }),
   }).catch(() => {});
 }
 

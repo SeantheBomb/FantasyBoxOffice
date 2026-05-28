@@ -19,5 +19,8 @@ export async function bootstrapSchema(db) {
   await db.prepare(
     `ALTER TABLE users ADD COLUMN discord_user_id TEXT`
   ).run().catch(() => {});
+  await db.prepare(
+    `ALTER TABLE auctions ADD COLUMN warning_sent_at TEXT`
+  ).run().catch(() => {});
   bootstrapped = true;
 }

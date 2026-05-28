@@ -8,7 +8,6 @@ import {
 
 const DISCORD_PUBLIC_KEY = "c606c11537ec649f897e142db70be33fe1432084920be1a0f18ba9d694609be7";
 const DEFAULT_AUCTION_DURATION_MS = 24 * 60 * 60 * 1000;
-const EXTEND_MS = 5 * 60 * 1000;
 
 function hexToBytes(hex) {
   const bytes = new Uint8Array(hex.length / 2);
@@ -339,15 +338,12 @@ export async function onRequestPost({ request, env }) {
       }
 
       const now = new Date().toISOString();
-      const extended = new Date(Math.max(
-        new Date(auction.ends_at).getTime(),
-        Date.now() + EXTEND_MS
-      )).toISOString();
+      const newEndsAt = new Date(Date.now() + DEFAULT_AUCTION_DURATION_MS).toISOString();
 
       await env.DB.batch([
         env.DB.prepare(
-          `UPDATE auctions SET current_bid = ?, current_bidder_id = ?, ends_at = ? WHERE id = ? AND status = 'open'`
-        ).bind(amount, leagueUser.id, extended, auction.id),
+          `UPDATE auctions SET current_bid = ?, current_bidder_id = ?, ends_at = ?, warning_sent_at = NULL WHERE id = ? AND status = 'open'`
+        ).bind(amount, leagueUser.id, newEndsAt, auction.id),
         env.DB.prepare(
           `INSERT INTO auction_bids (id, auction_id, user_id, amount, bid_at) VALUES (?, ?, ?, ?, ?)`
         ).bind(crypto.randomUUID(), auction.id, leagueUser.id, amount, now),
@@ -361,6 +357,7 @@ export async function onRequestPost({ request, env }) {
         bidderDiscordId: discordUser.id,
         bidderUsername: leagueUser.username,
         amount,
+        endsAt: newEndsAt,
       });
 
       const settleResult = await settleIfAllPassed(env.DB, auction.id);

@@ -89,6 +89,49 @@ export async function settleExpiredAuctions(db) {
   return { settled, skipped, checked: results?.length || 0, settledAuctions };
 }
 
+// Find open auctions ending in the 55–65 minute window that haven't been warned
+// yet, mark them warned, and return their details for Discord notification.
+// Called every minute from the settle cron — the 10-minute window guarantees
+// exactly one hit per auction regardless of which exact cron tick catches it.
+export async function markAndFindClosingSoonAuctions(db) {
+  const now = Date.now();
+  const windowStart = new Date(now + 55 * 60 * 1000).toISOString();
+  const windowEnd = new Date(now + 65 * 60 * 1000).toISOString();
+
+  const { results } = await db
+    .prepare(
+      `SELECT a.id, a.current_bid, a.ends_at,
+              m.title AS movie_title, m.poster_url,
+              u.username AS bidder_username, u.discord_user_id AS bidder_discord_id
+         FROM auctions a
+         JOIN movies m ON m.tmdb_id = a.tmdb_id
+         JOIN users u ON u.id = a.current_bidder_id
+         WHERE a.status = 'open' AND a.warning_sent_at IS NULL
+           AND a.ends_at BETWEEN ? AND ?`
+    )
+    .bind(windowStart, windowEnd)
+    .all();
+
+  if (!results?.length) return [];
+
+  const warningTime = new Date().toISOString();
+  for (const row of results) {
+    await db
+      .prepare(`UPDATE auctions SET warning_sent_at = ? WHERE id = ?`)
+      .bind(warningTime, row.id)
+      .run();
+  }
+
+  return results.map((r) => ({
+    movieTitle: r.movie_title,
+    posterUrl: r.poster_url,
+    currentBid: r.current_bid,
+    currentBidderUsername: r.bidder_username,
+    currentBidderDiscordId: r.bidder_discord_id,
+    endsAt: r.ends_at,
+  }));
+}
+
 // Returns eligible bidder user ids — real accounts, excludes placeholders from
 // TSV import so unclaimed seats don't block auto-settlement.
 export async function eligibleBidderIds(db) {

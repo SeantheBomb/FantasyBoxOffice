@@ -9,8 +9,9 @@
 
 import { refreshMovies, rollStatuses } from "../../functions/api/_tmdb.js";
 import { refreshDailies } from "../../functions/api/_boxoffice.js";
-import { settleExpiredAuctions } from "../../functions/api/_settlement.js";
-import { postAuctionSettled } from "../../functions/api/_discord.js";
+import { settleExpiredAuctions, markAndFindClosingSoonAuctions } from "../../functions/api/_settlement.js";
+import { postAuctionSettled, postAuctionClosingSoon } from "../../functions/api/_discord.js";
+import { bootstrapSchema } from "../../functions/api/_schema.js";
 import { runStandingsPost } from "./standings-job.js";
 import { runLastCallPost } from "./last-call-job.js";
 
@@ -71,6 +72,7 @@ async function runDailiesRefresh(env) {
 }
 
 async function runSettleExpired(env) {
+  await bootstrapSchema(env.DB);
   const result = await settleExpiredAuctions(env.DB);
   if (env.DISCORD_WEBHOOK_URL && result.settledAuctions?.length) {
     for (const a of result.settledAuctions) {
@@ -82,6 +84,12 @@ async function runSettleExpired(env) {
         winnerUsername: a.winnerUsername,
         amount: a.price,
       }).catch(() => {});
+    }
+  }
+  const closing = await markAndFindClosingSoonAuctions(env.DB);
+  if (env.DISCORD_WEBHOOK_URL && closing.length) {
+    for (const a of closing) {
+      await postAuctionClosingSoon(env.DISCORD_WEBHOOK_URL, a).catch(() => {});
     }
   }
   return result;

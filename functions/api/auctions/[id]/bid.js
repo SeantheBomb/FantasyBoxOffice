@@ -2,7 +2,7 @@ import { json, badRequest, requireUser, notFound } from "../../_auth";
 import { settleIfAllPassed } from "../../_settlement";
 import { postBidPlaced, postAuctionSettled } from "../../_discord";
 
-const EXTEND_MS = 5 * 60 * 1000;
+const BID_DURATION_MS = 24 * 60 * 60 * 1000;
 
 export async function onRequestPost({ request, env, params }) {
   const { user, response } = await requireUser(request, env);
@@ -33,17 +33,14 @@ export async function onRequestPost({ request, env, params }) {
   }
 
   const now = new Date().toISOString();
-  const extended = new Date(Math.max(
-    new Date(auction.ends_at).getTime(),
-    Date.now() + EXTEND_MS
-  )).toISOString();
+  const newEndsAt = new Date(Date.now() + BID_DURATION_MS).toISOString();
 
   await env.DB.batch([
     env.DB.prepare(
       `UPDATE auctions
-         SET current_bid = ?, current_bidder_id = ?, ends_at = ?
+         SET current_bid = ?, current_bidder_id = ?, ends_at = ?, warning_sent_at = NULL
          WHERE id = ? AND status = 'open'`
-    ).bind(amount, user.id, extended, auction.id),
+    ).bind(amount, user.id, newEndsAt, auction.id),
     env.DB.prepare(
       `INSERT INTO auction_bids (id, auction_id, user_id, amount, bid_at) VALUES (?, ?, ?, ?, ?)`
     ).bind(crypto.randomUUID(), auction.id, user.id, amount, now),
@@ -58,6 +55,7 @@ export async function onRequestPost({ request, env, params }) {
     bidderDiscordId: user.discord_user_id,
     bidderUsername: user.username,
     amount,
+    endsAt: newEndsAt,
   });
 
   // After the current bidder flips, the new leader may already have everyone
@@ -74,5 +72,5 @@ export async function onRequestPost({ request, env, params }) {
     });
   }
 
-  return json({ ok: true, current_bid: amount, ends_at: extended });
+  return json({ ok: true, current_bid: amount, ends_at: newEndsAt });
 }
