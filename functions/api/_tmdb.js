@@ -125,13 +125,14 @@ export async function upsertMovies(db, rows) {
   const now = new Date().toISOString();
   const stmts = rows.map((r) =>
     db.prepare(
-      `INSERT INTO movies (tmdb_id, title, release_date, budget, poster_url, popularity, status, tmdb_updated_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, COALESCE((SELECT status FROM movies WHERE tmdb_id = ?), 'unreleased'), ?, ?)
+      `INSERT INTO movies (tmdb_id, title, release_date, budget, poster_url, popularity, overview, status, tmdb_updated_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT status FROM movies WHERE tmdb_id = ?), 'unreleased'), ?, ?)
        ON CONFLICT(tmdb_id) DO UPDATE SET
          title = excluded.title,
          release_date = excluded.release_date,
          poster_url = excluded.poster_url,
          popularity = excluded.popularity,
+         overview = excluded.overview,
          tmdb_updated_at = excluded.tmdb_updated_at`
     ).bind(
       r.tmdb_id,
@@ -140,6 +141,7 @@ export async function upsertMovies(db, rows) {
       r.budget || 0,
       r.poster_url || null,
       r.popularity || 0,
+      r.overview || "",
       r.tmdb_id,
       now,
       now
@@ -162,6 +164,7 @@ export async function refreshMovies({ db, token, from, to, minPopularity = 0 }) 
     budget: 0,
     poster_url: posterUrl(m.poster_path),
     popularity: m.popularity || 0,
+    overview: m.overview || "",
   }));
   await upsertMovies(db, rows);
   return { upserted: rows.length, discovered: releases.length };

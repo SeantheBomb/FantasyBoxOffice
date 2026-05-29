@@ -89,6 +89,10 @@ const commands = [
       },
     ],
   },
+  {
+    name: "upcoming",
+    description: "List movies releasing in the next 8 weeks, highlighting ones still available to auction",
+  },
 ];
 
 const url = `https://discord.com/api/v10/applications/${APP_ID}/commands`;

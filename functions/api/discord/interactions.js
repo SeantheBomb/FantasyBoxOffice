@@ -56,6 +56,11 @@ function respond(data) {
   });
 }
 
+function formatReleaseDate(dateStr) {
+  const d = new Date(dateStr + "T12:00:00Z");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
 // Ephemeral reply — only the user who ran the command sees it.
 function ephemeral(content) {
   return respond({ type: 4, data: { content, flags: 64 } });
@@ -451,6 +456,62 @@ export async function onRequestPost({ request, env }) {
       }
 
       return ephemeral(`Passed on **${auction.movie_title}**. You won't be able to bid on this movie again.`);
+    }
+
+    // ── /upcoming ─────────────────────────────────────────────────────────────
+    if (cmdName === "upcoming") {
+      const { results } = await env.DB.prepare(
+        `SELECT
+           m.tmdb_id, m.title, m.release_date, m.poster_url, m.popularity, m.overview,
+           CASE WHEN om.tmdb_id IS NOT NULL THEN 1 ELSE 0 END AS is_owned,
+           u.username AS owner_username
+         FROM movies m
+         LEFT JOIN owned_movies om ON om.tmdb_id = m.tmdb_id AND om.is_void = 0
+         LEFT JOIN users u ON u.id = om.owner_user_id
+         WHERE m.release_date >= date('now')
+           AND m.release_date <= date('now', '+56 days')
+         ORDER BY m.release_date ASC, is_owned ASC, m.popularity DESC
+         LIMIT 50`
+      ).all();
+
+      if (!results.length) {
+        return respond({ type: 4, data: { content: "No movies found releasing in the next 8 weeks." } });
+      }
+
+      const unowned = results.filter((m) => !m.is_owned);
+      const owned = results.filter((m) => m.is_owned);
+
+      const embeds = unowned.slice(0, 10).map((m) => {
+        const synopsis = m.overview
+          ? m.overview.length > 150 ? m.overview.slice(0, 147) + "…" : m.overview
+          : "";
+        return {
+          title: m.title,
+          description: synopsis || undefined,
+          color: 0x57f287,
+          thumbnail: m.poster_url ? { url: m.poster_url } : undefined,
+          fields: [
+            { name: "Release", value: formatReleaseDate(m.release_date), inline: true },
+            { name: "Popularity", value: String(Math.round(m.popularity)), inline: true },
+          ],
+        };
+      });
+
+      const lines = [`**Upcoming movies — next 8 weeks**`];
+      if (unowned.length === 0) {
+        lines.push("All upcoming movies are already owned.");
+      } else {
+        lines.push(`**${unowned.length}** available to auction${unowned.length > 10 ? ` (showing first 10 below)` : ""}:`);
+      }
+
+      if (owned.length > 0) {
+        lines.push(`\n**Owned:**`);
+        for (const m of owned) {
+          lines.push(`• **${m.title}** (${formatReleaseDate(m.release_date)}) — ${m.owner_username}`);
+        }
+      }
+
+      return respond({ type: 4, data: { content: lines.join("\n"), embeds } });
     }
   }
 

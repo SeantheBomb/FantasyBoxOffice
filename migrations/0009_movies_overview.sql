@@ -1,0 +1,1 @@
+ALTER TABLE movies ADD COLUMN overview TEXT NOT NULL DEFAULT '';
