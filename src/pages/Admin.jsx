@@ -876,6 +876,14 @@ function ManualDailyPanel() {
   );
 }
 
+function nextFriday() {
+  const now = new Date();
+  const daysUntilFriday = ((5 - now.getUTCDay() + 7) % 7) || 7;
+  const d = new Date(now);
+  d.setUTCDate(now.getUTCDate() + daysUntilFriday);
+  return d.toISOString().slice(0, 10);
+}
+
 function WeekendPanel() {
   const [data, setData] = useState(null);
   const [version, setVersion] = useState(0);
@@ -892,8 +900,9 @@ function WeekendPanel() {
   const [addPickForm, setAddPickForm] = useState({ discord_user_id: "", estimate: "" });
   const [reviewDate, setReviewDate] = useState(""); // when set, loads a past weekend for audit/re-score
 
-  // Lineup config state
-  const [configDate, setConfigDate] = useState("");
+  // Lineup config state — default to next upcoming Friday so the form is
+  // never pre-filled with a stale past date.
+  const [configDate, setConfigDate] = useState(() => nextFriday());
   const [movieQuery, setMovieQuery] = useState("");
   const [catalog, setCatalog] = useState(null);
   const [lineupIds, setLineupIds] = useState([]);
@@ -907,8 +916,16 @@ function WeekendPanel() {
       if (cancelled) return;
       if (r.ok) {
         setData(r.data);
-        if (!reviewDate && r.data.weekend_date) setConfigDate(r.data.weekend_date);
-        if (!reviewDate && r.data.movies) setLineupIds(r.data.movies.map((m) => m.tmdb_id));
+        if (!reviewDate && r.data.weekend_date) {
+          const today = new Date().toISOString().slice(0, 10);
+          // Only pull the saved date+lineup into the form if it's a future weekend.
+          // Past dates stay in `data` for the scoring section but don't overwrite
+          // the "next Friday" default in the configure-lineup form.
+          if (r.data.weekend_date > today) {
+            setConfigDate(r.data.weekend_date);
+            if (r.data.movies) setLineupIds(r.data.movies.map((m) => m.tmdb_id));
+          }
+        }
       }
     });
     apiGameCatalog({ status: "all", owner: "any" }).then((r) => {
