@@ -3,14 +3,25 @@ import { scoreMovie } from "../../_weekend-scoring.js";
 
 async function getActiveDate(db, override) {
   if (override) return override;
-  const row = await db
+  // Prefer the next upcoming weekend so the admin form loads the lineup that
+  // still needs attention. Fall back to the most recent past weekend (within
+  // 3 days) so the scoring section still works on Monday/Tuesday.
+  const future = await db
     .prepare(
       `SELECT DISTINCT weekend_date FROM weekend_movies
-       WHERE weekend_date >= date('now', '-3 days')
+       WHERE weekend_date >= date('now')
        ORDER BY weekend_date ASC LIMIT 1`
     )
     .first();
-  return row?.weekend_date ?? null;
+  if (future?.weekend_date) return future.weekend_date;
+  const past = await db
+    .prepare(
+      `SELECT DISTINCT weekend_date FROM weekend_movies
+       WHERE weekend_date >= date('now', '-3 days')
+       ORDER BY weekend_date DESC LIMIT 1`
+    )
+    .first();
+  return past?.weekend_date ?? null;
 }
 
 export async function onRequestGet({ request, env }) {
