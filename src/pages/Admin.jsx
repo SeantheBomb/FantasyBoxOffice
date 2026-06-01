@@ -939,7 +939,11 @@ function WeekendPanel() {
     const r = await apiAdminSetWeekendMovies(configDate, lineupIds);
     setLineupBusy(false);
     setLineupMsg(r.ok ? { ok: true, text: `Saved ${lineupIds.length} movies for ${configDate}` } : { error: r.data?.error || "Failed" });
-    if (r.ok) setVersion((v) => v + 1);
+    if (r.ok) {
+      // Refresh the scoring/picks section for this specific date without triggering
+      // the useEffect, which would reset configDate and lineupIds to the active weekend.
+      apiAdminWeekendScore(configDate).then((res) => { if (res.ok) setData(res.data); });
+    }
   }
 
   async function suggestLineup() {
