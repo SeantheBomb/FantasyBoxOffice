@@ -77,22 +77,17 @@ export async function scoreMovie(db, { tmdb_id, weekend_date, actual_gross }) {
     ]);
   }
 
-  const allIds = [
-    ...scored.map((p) => p.discord_user_id),
-    ...abstentions.map((u) => u.discord_user_id),
-  ];
+  // Read live points_remaining (the real balance) rather than summing prediction
+  // earnings only — the two diverge once auction bids enter the picture.
   const totalsMap = {};
-  if (allIds.length) {
-    const ph = allIds.map(() => "?").join(",");
-    const { results: totals } = await db
-      .prepare(
-        `SELECT discord_user_id, SUM(COALESCE(points_awarded, 0)) AS total
-         FROM weekend_picks WHERE discord_user_id IN (${ph})
-         GROUP BY discord_user_id`
-      )
-      .bind(...allIds)
+  {
+    const { results: balances } = await db
+      .prepare(`SELECT id, discord_user_id, points_remaining FROM users WHERE in_league = 1`)
       .all();
-    for (const t of totals) totalsMap[t.discord_user_id] = t.total;
+    for (const u of balances) {
+      if (u.discord_user_id) totalsMap[u.discord_user_id] = u.points_remaining;
+      totalsMap[`fbo_${u.id}`] = u.points_remaining;
+    }
   }
 
   const title = movie?.title ?? `Movie #${tmdb_id}`;
