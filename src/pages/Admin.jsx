@@ -367,7 +367,7 @@ function VoidMoviePanel() {
         </div>
         {result?.ok && (
           <div style={{ color: "var(--fbo-success)" }}>
-            Voided: <b>{result.movie.title}</b> (owned by {result.owner.username}) — Discord announcement posted
+            Voided: <b>{result.movie.title}</b> — {result.void_cost} pts deducted from {result.owner.username} — Discord announcement posted
           </div>
         )}
         {result?.error && <div style={{ color: "var(--fbo-danger)" }}>{result.error}</div>}

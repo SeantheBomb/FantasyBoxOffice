@@ -279,20 +279,26 @@ export async function postPassPlaced(webhookUrl, { movieTitle, passerDiscordId, 
   }).catch(() => {});
 }
 
-export async function postMovieVoided(webhookUrl, { movieTitle, posterUrl, ownerUsername, ownerDiscordId, ownerStanding }) {
+export async function postMovieVoided(webhookUrl, { movieTitle, posterUrl, ownerUsername, ownerDiscordId, ownerStanding, voidCost }) {
   if (!webhookUrl) return;
   const who = ownerDiscordId ? `<@${ownerDiscordId}>` : `**${ownerUsername}**`;
+  const costLine = voidCost != null ? `Void cost: **${voidCost} pts**` : null;
   const standingLines = ownerStanding
     ? [
         ``,
         `**${ownerUsername}'s updated standing:**`,
         `Total Profit: **${formatShort(ownerStanding.total_profit)}** *(${ordinalPlace(ownerStanding.place)} Place)*`,
-        `Points remaining: **${ownerStanding.points_remaining}**`,
+        `Points remaining: **${ownerStanding.points_remaining} pts**`,
       ]
     : [];
+  const descParts = [
+    `${who}'s **${movieTitle}** has been voided.`,
+    ...(costLine ? [costLine] : []),
+    ...standingLines,
+  ];
   const embed = {
     title: `🚫 Movie Voided: ${movieTitle}`,
-    description: [`${who}'s **${movieTitle}** has been voided.`, ...standingLines].join("\n"),
+    description: descParts.join("\n"),
     color: 0xef4444,
     ...(posterUrl ? { thumbnail: { url: posterUrl } } : {}),
   };

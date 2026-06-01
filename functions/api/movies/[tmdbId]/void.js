@@ -41,6 +41,7 @@ export async function onRequestPost({ request, env, params }) {
       ownerUsername: user.username,
       ownerDiscordId: user.discord_user_id ?? null,
       ownerStanding,
+      voidCost,
     });
   } catch (e) {
     console.error("Discord void announcement failed:", e);

@@ -518,7 +518,8 @@ export async function onRequestPost({ request, env }) {
       const row = await env.DB.prepare(
         `SELECT o.tmdb_id, o.owner_user_id, o.purchase_price, o.is_void,
                 m.title, m.poster_url,
-                u.username AS owner_username, u.discord_user_id AS owner_discord_id
+                u.username AS owner_username, u.discord_user_id AS owner_discord_id,
+                u.points_remaining AS owner_points
          FROM owned_movies o
          JOIN movies m ON m.tmdb_id = o.tmdb_id
          JOIN users u ON u.id = o.owner_user_id
@@ -533,21 +534,18 @@ export async function onRequestPost({ request, env }) {
       }
 
       const voidCost = 2 * row.purchase_price;
-
-      if (leagueUser.is_admin) {
-        await env.DB.prepare(`UPDATE owned_movies SET is_void = 1 WHERE tmdb_id = ?`).bind(tmdbId).run();
-      } else {
-        if ((leagueUser.points_remaining || 0) < voidCost) {
-          return ephemeral(
-            `You need **${voidCost} pts** to void **${row.title}** (2× its purchase price of ${row.purchase_price} pts), but you only have **${leagueUser.points_remaining}**.`
-          );
-        }
-        await env.DB.batch([
-          env.DB.prepare(`UPDATE owned_movies SET is_void = 1 WHERE tmdb_id = ?`).bind(tmdbId),
-          env.DB.prepare(`UPDATE users SET points_remaining = points_remaining - ? WHERE id = ?`)
-            .bind(voidCost, leagueUser.id),
-        ]);
+      if ((row.owner_points || 0) < voidCost) {
+        const msg = leagueUser.is_admin
+          ? `**${row.owner_username}** only has **${row.owner_points} pts** — need **${voidCost}** to void **${row.title}** (2× purchase price of ${row.purchase_price} pts).`
+          : `You need **${voidCost} pts** to void **${row.title}** (2× its purchase price of ${row.purchase_price} pts), but you only have **${row.owner_points}**.`;
+        return ephemeral(msg);
       }
+
+      await env.DB.batch([
+        env.DB.prepare(`UPDATE owned_movies SET is_void = 1 WHERE tmdb_id = ?`).bind(tmdbId),
+        env.DB.prepare(`UPDATE users SET points_remaining = points_remaining - ? WHERE id = ?`)
+          .bind(voidCost, row.owner_user_id),
+      ]);
 
       try {
         const standings = await computeStandings(env.DB);
@@ -559,13 +557,14 @@ export async function onRequestPost({ request, env }) {
           ownerUsername: row.owner_username,
           ownerDiscordId: row.owner_discord_id,
           ownerStanding,
+          voidCost,
         });
       } catch (e) {
         console.error("Discord void announcement failed:", e);
       }
 
       if (leagueUser.is_admin) {
-        return ephemeral(`Voided **${row.title}** (owned by ${row.owner_username}). Announcement posted.`);
+        return ephemeral(`Voided **${row.title}** (owned by ${row.owner_username}) — **${voidCost} pts** deducted from their balance. Announcement posted.`);
       }
       return ephemeral(`Voided **${row.title}** — **${voidCost} pts** deducted. Announcement posted.`);
     }

@@ -12,7 +12,8 @@ export async function onRequestPost({ request, env, params }) {
   const row = await env.DB.prepare(
     `SELECT o.tmdb_id, o.owner_user_id, o.purchase_price, o.is_void,
             m.title, m.poster_url,
-            u.username AS owner_username, u.discord_user_id AS owner_discord_id
+            u.username AS owner_username, u.discord_user_id AS owner_discord_id,
+            u.points_remaining AS owner_points
      FROM owned_movies o
      JOIN movies m ON m.tmdb_id = o.tmdb_id
      JOIN users u ON u.id = o.owner_user_id
@@ -22,7 +23,18 @@ export async function onRequestPost({ request, env, params }) {
   if (!row) return notFound("Not owned");
   if (row.is_void) return badRequest("Already void");
 
-  await env.DB.prepare(`UPDATE owned_movies SET is_void = 1 WHERE tmdb_id = ?`).bind(tmdbId).run();
+  const voidCost = 2 * row.purchase_price;
+  if ((row.owner_points || 0) < voidCost) {
+    return badRequest(
+      `${row.owner_username} only has ${row.owner_points} pts — need ${voidCost} to void this movie (2× purchase price of ${row.purchase_price})`
+    );
+  }
+
+  await env.DB.batch([
+    env.DB.prepare(`UPDATE owned_movies SET is_void = 1 WHERE tmdb_id = ?`).bind(tmdbId),
+    env.DB.prepare(`UPDATE users SET points_remaining = points_remaining - ? WHERE id = ?`)
+      .bind(voidCost, row.owner_user_id),
+  ]);
 
   try {
     const standings = await computeStandings(env.DB);
@@ -34,10 +46,11 @@ export async function onRequestPost({ request, env, params }) {
       ownerUsername: row.owner_username,
       ownerDiscordId: row.owner_discord_id,
       ownerStanding,
+      voidCost,
     });
   } catch (e) {
     console.error("Discord void announcement failed:", e);
   }
 
-  return json({ ok: true, movie: { title: row.title }, owner: { username: row.owner_username } });
+  return json({ ok: true, void_cost: voidCost, movie: { title: row.title }, owner: { username: row.owner_username } });
 }
