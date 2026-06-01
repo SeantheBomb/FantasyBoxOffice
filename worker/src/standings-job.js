@@ -140,12 +140,13 @@ async function autoScoreWeekendPicks(env) {
 
   const results = [];
   for (const movie of unscored) {
-    // Opening weekend gross = first dailies entry in the week after release.
-    // backfillDailies (run above) populates this from BOM's weekly release chart.
+    // Opening weekend gross = cumulative through Sunday (weekend_date + 2 days).
+    // Use DESC within a Fri–Mon window so we get the latest available entry,
+    // which equals the full Fri+Sat+Sun total rather than just Friday's gross.
     const daily = await env.DB.prepare(
       `SELECT domestic_revenue FROM dailies
-       WHERE tmdb_id = ? AND date BETWEEN ? AND date(?, '+7 days')
-       ORDER BY date ASC LIMIT 1`
+       WHERE tmdb_id = ? AND date BETWEEN ? AND date(?, '+3 days')
+       ORDER BY date DESC LIMIT 1`
     )
       .bind(movie.tmdb_id, movie.weekend_date, movie.weekend_date)
       .first();

@@ -895,6 +895,7 @@ function WeekendPanel() {
   const [scoreBusy, setScoreBusy] = useState({});
   const [scoreResults, setScoreResults] = useState({});
   const [scoreNotify, setScoreNotify] = useState({}); // per-movie "post to Discord" toggle
+  const [scoreCorrection, setScoreCorrection] = useState({}); // per-movie correction flag
   const [editingPick, setEditingPick] = useState(null); // { id, estimate (string) }
   const [addingPick, setAddingPick] = useState(null);   // tmdb_id being added to
   const [addPickForm, setAddPickForm] = useState({ discord_user_id: "", estimate: "" });
@@ -1035,8 +1036,9 @@ function WeekendPanel() {
     if (!millions || millions <= 0) return;
     const gross = Math.round(millions) * 1_000_000;
     const notify = scoreNotify[tmdbId] !== false; // default true
+    const correction = !!(scoreCorrection[tmdbId]);
     setScoreBusy((b) => ({ ...b, [tmdbId]: true }));
-    const r = await apiAdminScoreMovie(data.weekend_date, tmdbId, gross, notify);
+    const r = await apiAdminScoreMovie(data.weekend_date, tmdbId, gross, notify, correction);
     setScoreBusy((b) => ({ ...b, [tmdbId]: false }));
     if (r.ok) {
       setScoreResults((s) => ({ ...s, [tmdbId]: { ok: true, data: r.data } }));
@@ -1324,6 +1326,18 @@ function WeekendPanel() {
                 />
                 <span style={{ fontSize: 12, marginLeft: 2 }}>$M</span>
               </label>
+              {m.bom_gross != null && (
+                <span style={{ fontSize: 12, color: "var(--fbo-text-muted)" }}>
+                  BOM:{" "}
+                  <button
+                    style={{ fontSize: 12, padding: "1px 5px" }}
+                    title="Use this BOM opening weekend figure"
+                    onClick={() => setScoreInputs((s) => ({ ...s, [m.tmdb_id]: String(Math.round(m.bom_gross / 1_000_000)) }))}
+                  >
+                    ${Math.round(m.bom_gross / 1_000_000)}M ↑
+                  </button>
+                </span>
+              )}
               <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 4 }}>
                 <input
                   type="checkbox"
@@ -1332,6 +1346,16 @@ function WeekendPanel() {
                 />
                 Post to #game-feed
               </label>
+              {isScored && scoreNotify[m.tmdb_id] !== false && (
+                <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 4 }}>
+                  <input
+                    type="checkbox"
+                    checked={!!scoreCorrection[m.tmdb_id]}
+                    onChange={(e) => setScoreCorrection((c) => ({ ...c, [m.tmdb_id]: e.target.checked }))}
+                  />
+                  Post as correction
+                </label>
+              )}
               <button
                 onClick={() => scoreMovie(m.tmdb_id)}
                 disabled={scoreBusy[m.tmdb_id] || !scoreInputs[m.tmdb_id]}

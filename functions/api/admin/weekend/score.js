@@ -37,7 +37,11 @@ export async function onRequestGet({ request, env }) {
   const [{ results: movies }, { results: allPicks }, { results: leagueUsers }] = await Promise.all([
     env.DB.prepare(
       `SELECT m.tmdb_id, m.title, m.poster_url, u.username AS owner,
-              wr.actual_gross, wr.scored_at
+              wr.actual_gross, wr.scored_at,
+              (SELECT domestic_revenue FROM dailies
+               WHERE tmdb_id = m.tmdb_id
+                 AND date BETWEEN wm.weekend_date AND date(wm.weekend_date, '+3 days')
+               ORDER BY date DESC LIMIT 1) AS bom_gross
        FROM weekend_movies wm
        JOIN movies m ON m.tmdb_id = wm.tmdb_id
        JOIN owned_movies om ON om.tmdb_id = wm.tmdb_id AND om.is_void = 0
@@ -90,11 +94,15 @@ export async function onRequestPost({ request, env }) {
   const result = await scoreMovie(env.DB, body);
 
   const notify = body.notify !== false; // default true
-  if (notify && env.DISCORD_WEBHOOK_URL) {
-    await fetch(env.DISCORD_WEBHOOK_URL, {
+  const correction = !!body.correction;
+  if (notify && env.DISCORD_GAME_FEED_WEBHOOK_URL) {
+    const content = correction
+      ? `⚠️ **CORRECTION** — The previous result for this movie was incorrect.\n\n${result.content}`
+      : result.content;
+    await fetch(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: result.content }),
+      body: JSON.stringify({ content }),
     }).catch(() => {});
   }
 

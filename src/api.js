@@ -106,10 +106,10 @@ export const apiAdminSetInLeague = (userId, inLeague) =>
 // Weekend predictions
 export const apiAdminWeekendScore = (weekendDate) =>
   jsonFetch("/api/admin/weekend/score" + (weekendDate ? `?weekend_date=${weekendDate}` : ""));
-export const apiAdminScoreMovie = (weekendDate, tmdbId, actualGross, notify = true) =>
+export const apiAdminScoreMovie = (weekendDate, tmdbId, actualGross, notify = true, correction = false) =>
   jsonFetch("/api/admin/weekend/score", {
     method: "POST",
-    body: { weekend_date: weekendDate, tmdb_id: tmdbId, actual_gross: actualGross, notify },
+    body: { weekend_date: weekendDate, tmdb_id: tmdbId, actual_gross: actualGross, notify, correction },
   });
 export const apiAdminWeekendMovies = (weekendDate) =>
   jsonFetch("/api/admin/weekend/movies" + (weekendDate ? `?weekend_date=${weekendDate}` : ""));
