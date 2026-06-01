@@ -93,6 +93,19 @@ const commands = [
     name: "upcoming",
     description: "List movies releasing in the next 8 weeks, highlighting ones still available to auction",
   },
+  {
+    name: "void",
+    description: "Void one of your owned movies (costs 2× its purchase price). Admins can void anyone's movie free.",
+    options: [
+      {
+        name: "movie",
+        description: "Movie to void",
+        type: 3, // STRING
+        required: true,
+        autocomplete: true,
+      },
+    ],
+  },
 ];
 
 const url = `https://discord.com/api/v10/applications/${APP_ID}/commands`;

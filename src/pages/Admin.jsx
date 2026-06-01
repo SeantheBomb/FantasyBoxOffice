@@ -7,6 +7,7 @@ import {
   apiAdminPostStandingsToDiscord,
   apiAdminRecordAuction,
   apiAdminRevokeMovie,
+  apiAdminVoidMovie,
   apiAdminSetBudget,
   apiAuctions, apiAdminEditAuction, apiAdminDeleteAuction, apiAdminAuditAuction, apiAdminDeleteBid,
   apiGameCatalog,
@@ -31,6 +32,7 @@ export default function Admin() {
       <AddMoviePanel />
       <RecordAuctionPanel />
       <RevokeMoviePanel />
+      <VoidMoviePanel />
       <ImportPanel />
       <UsersPanel />
       <AuctionsPanel />
@@ -266,6 +268,106 @@ function RevokeMoviePanel() {
         {result?.ok && (
           <div style={{ color: "var(--fbo-success)" }}>
             Revoked: <b>{result.movie.title}</b> — {result.refunded} pts refunded
+          </div>
+        )}
+        {result?.error && <div style={{ color: "var(--fbo-danger)" }}>{result.error}</div>}
+      </form>
+    </section>
+  );
+}
+
+function VoidMoviePanel() {
+  const [movies, setMovies] = useState(null);
+  const [movieQuery, setMovieQuery] = useState("");
+  const [selected, setSelected] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const [version, setVersion] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiGameCatalog({ owner: "any" }).then((r) => {
+      if (!cancelled && r.ok) setMovies(r.data.movies.filter((m) => !m.is_void));
+    });
+    return () => { cancelled = true; };
+  }, [version]);
+
+  const matches = useMemo(() => {
+    if (!movies) return [];
+    const q = movieQuery.trim().toLowerCase();
+    if (!q) return movies.slice(0, 50);
+    return movies.filter((m) => m.title.toLowerCase().includes(q)).slice(0, 50);
+  }, [movies, movieQuery]);
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!selected) return;
+    setBusy(true);
+    setResult(null);
+    const r = await apiAdminVoidMovie(selected.tmdb_id);
+    setBusy(false);
+    if (r.ok) {
+      setResult({ ok: true, ...r.data });
+      setSelected(null);
+      setMovieQuery("");
+      setVersion((v) => v + 1);
+    } else {
+      setResult({ error: r.data?.error || `Failed (${r.status})` });
+    }
+  }
+
+  return (
+    <section style={card}>
+      <h3>Void a movie (admin)</h3>
+      <p style={{ fontSize: 13, color: "#666", marginTop: 0 }}>
+        Marks the movie as void — it scores 0 profit regardless of box office. No cost to the owner.
+        A Discord announcement is posted automatically.
+      </p>
+      <form onSubmit={submit} style={{ display: "grid", gap: 8, maxWidth: 720 }}>
+        <div>
+          <label style={{ display: "block", marginBottom: 4 }}>Movie</label>
+          {selected ? (
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <span>
+                <b>{selected.title}</b> · owned by <b>{selected.owner_username}</b> · {selected.purchase_price} pts
+              </span>
+              <button type="button" onClick={() => { setSelected(null); setMovieQuery(""); }}>Change</button>
+            </div>
+          ) : (
+            <>
+              <input
+                placeholder="Search owned movies..."
+                value={movieQuery}
+                onChange={(e) => setMovieQuery(e.target.value)}
+                style={{ width: "100%", maxWidth: 420 }}
+              />
+              {!movies ? <div style={{ marginTop: 6, color: "var(--fbo-text-muted)" }}>Loading...</div> : (
+                <div style={{ maxHeight: 200, overflow: "auto", border: "1px solid var(--fbo-border)", borderRadius: 4, marginTop: 6 }}>
+                  {matches.length === 0 ? (
+                    <div style={{ padding: 8, color: "var(--fbo-text-muted)" }}>No matches.</div>
+                  ) : matches.map((m) => (
+                    <div
+                      key={m.tmdb_id}
+                      onClick={() => setSelected(m)}
+                      style={{ padding: 6, cursor: "pointer", borderBottom: "1px solid var(--fbo-border)" }}
+                    >
+                      <b>{m.title}</b> · <span style={{ color: "var(--fbo-text-muted)" }}>{m.release_date}</span>
+                      {" · "}<span style={{ color: "var(--fbo-text-muted)" }}>owned by {m.owner_username} ({m.purchase_price} pts)</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+        <div>
+          <button type="submit" disabled={busy || !selected} style={{ background: "var(--fbo-danger)", color: "#fff", border: "none", borderRadius: 4, padding: "6px 16px", cursor: "pointer" }}>
+            {busy ? "Voiding..." : `Void${selected ? ` ${selected.title}` : ""}`}
+          </button>
+        </div>
+        {result?.ok && (
+          <div style={{ color: "var(--fbo-success)" }}>
+            Voided: <b>{result.movie.title}</b> (owned by {result.owner.username}) — Discord announcement posted
           </div>
         )}
         {result?.error && <div style={{ color: "var(--fbo-danger)" }}>{result.error}</div>}

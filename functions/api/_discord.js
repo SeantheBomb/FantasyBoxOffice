@@ -279,6 +279,30 @@ export async function postPassPlaced(webhookUrl, { movieTitle, passerDiscordId, 
   }).catch(() => {});
 }
 
+export async function postMovieVoided(webhookUrl, { movieTitle, posterUrl, ownerUsername, ownerDiscordId, ownerStanding }) {
+  if (!webhookUrl) return;
+  const who = ownerDiscordId ? `<@${ownerDiscordId}>` : `**${ownerUsername}**`;
+  const standingLines = ownerStanding
+    ? [
+        ``,
+        `**${ownerUsername}'s updated standing:**`,
+        `Total Profit: **${formatShort(ownerStanding.total_profit)}** *(${ordinalPlace(ownerStanding.place)} Place)*`,
+        `Points remaining: **${ownerStanding.points_remaining}**`,
+      ]
+    : [];
+  const embed = {
+    title: `🚫 Movie Voided: ${movieTitle}`,
+    description: [`${who}'s **${movieTitle}** has been voided.`, ...standingLines].join("\n"),
+    color: 0xef4444,
+    ...(posterUrl ? { thumbnail: { url: posterUrl } } : {}),
+  };
+  await fetch(webhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ embeds: [embed] }),
+  }).catch(() => {});
+}
+
 export async function postAuctionSettled(webhookUrl, { movieTitle, posterUrl, winnerDiscordId, winnerUsername, amount, releaseDate }) {
   if (!webhookUrl) return;
   const who = winnerDiscordId ? `<@${winnerDiscordId}>` : `**${winnerUsername}**`;

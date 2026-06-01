@@ -1,9 +1,11 @@
 import { settleIfAllPassed } from "../_settlement.js";
+import { computeStandings } from "../game/_standings.js";
 import {
   postAuctionStarted,
   postBidPlaced,
   postPassPlaced,
   postAuctionSettled,
+  postMovieVoided,
 } from "../_discord.js";
 
 const DISCORD_PUBLIC_KEY = "c606c11537ec649f897e142db70be33fe1432084920be1a0f18ba9d694609be7";
@@ -81,7 +83,7 @@ async function getActiveWeekend(db) {
 async function getLeagueUser(db, discordUserId) {
   return db
     .prepare(
-      `SELECT id, username, points_remaining FROM users
+      `SELECT id, username, points_remaining, is_admin, discord_user_id FROM users
        WHERE discord_user_id = ? AND in_league = 1 LIMIT 1`
     )
     .bind(discordUserId)
@@ -153,6 +155,46 @@ export async function onRequestPost({ request, env }) {
           choices: results.map((r) => ({
             name: `${r.title} (current: ${r.current_bid} pt${r.current_bid !== 1 ? "s" : ""})`,
             value: r.id,
+          })),
+        },
+      });
+    }
+
+    if (cmdName === "void") {
+      const discordUser = interaction.member?.user ?? interaction.user;
+      const leagueUser = await getLeagueUser(env.DB, discordUser.id);
+      const focusedOption = interaction.data?.options?.find((o) => o.focused);
+      const typed = (focusedOption?.value || "").trim();
+      // Admins see all owned non-void movies; players see only their own.
+      let query, binds;
+      if (leagueUser?.is_admin) {
+        query = `SELECT o.tmdb_id, m.title, u.username AS owner_username
+                 FROM owned_movies o
+                 JOIN movies m ON m.tmdb_id = o.tmdb_id
+                 JOIN users u ON u.id = o.owner_user_id
+                 WHERE o.is_void = 0
+                   AND (? = '' OR LOWER(m.title) LIKE '%' || LOWER(?) || '%')
+                 ORDER BY m.title LIMIT 25`;
+        binds = [typed, typed];
+      } else if (leagueUser) {
+        query = `SELECT o.tmdb_id, m.title, u.username AS owner_username
+                 FROM owned_movies o
+                 JOIN movies m ON m.tmdb_id = o.tmdb_id
+                 JOIN users u ON u.id = o.owner_user_id
+                 WHERE o.is_void = 0 AND o.owner_user_id = ?
+                   AND (? = '' OR LOWER(m.title) LIKE '%' || LOWER(?) || '%')
+                 ORDER BY m.title LIMIT 25`;
+        binds = [leagueUser.id, typed, typed];
+      } else {
+        return respond({ type: 8, data: { choices: [] } });
+      }
+      const { results } = await env.DB.prepare(query).bind(...binds).all();
+      return respond({
+        type: 8,
+        data: {
+          choices: results.map((r) => ({
+            name: leagueUser.is_admin ? `${r.title} (${r.owner_username})` : r.title,
+            value: String(r.tmdb_id),
           })),
         },
       });
@@ -456,6 +498,76 @@ export async function onRequestPost({ request, env }) {
       }
 
       return ephemeral(`Passed on **${auction.movie_title}**. You won't be able to bid on this movie again.`);
+    }
+
+    // ── /void ─────────────────────────────────────────────────────────────────
+    if (cmdName === "void") {
+      const leagueUser = await getLeagueUser(env.DB, discordUser.id);
+      if (!leagueUser) {
+        return ephemeral(
+          "Your Discord account isn't linked to a league account yet. Log in at https://fantasyboxoffice.pages.dev/ and visit **My Account** to link your Discord ID."
+        );
+      }
+
+      const opts = Object.fromEntries(
+        (interaction.data.options || []).map((o) => [o.name, o.value])
+      );
+      const tmdbId = parseInt(opts.movie, 10);
+      if (!tmdbId) return ephemeral("Please select a movie from the list.");
+
+      const row = await env.DB.prepare(
+        `SELECT o.tmdb_id, o.owner_user_id, o.purchase_price, o.is_void,
+                m.title, m.poster_url,
+                u.username AS owner_username, u.discord_user_id AS owner_discord_id
+         FROM owned_movies o
+         JOIN movies m ON m.tmdb_id = o.tmdb_id
+         JOIN users u ON u.id = o.owner_user_id
+         WHERE o.tmdb_id = ? LIMIT 1`
+      ).bind(tmdbId).first();
+
+      if (!row) return ephemeral("That movie isn't owned by anyone.");
+      if (row.is_void) return ephemeral("That movie is already void.");
+
+      if (!leagueUser.is_admin && row.owner_user_id !== leagueUser.id) {
+        return ephemeral("You can only void movies you own.");
+      }
+
+      const voidCost = 2 * row.purchase_price;
+
+      if (leagueUser.is_admin) {
+        await env.DB.prepare(`UPDATE owned_movies SET is_void = 1 WHERE tmdb_id = ?`).bind(tmdbId).run();
+      } else {
+        if ((leagueUser.points_remaining || 0) < voidCost) {
+          return ephemeral(
+            `You need **${voidCost} pts** to void **${row.title}** (2× its purchase price of ${row.purchase_price} pts), but you only have **${leagueUser.points_remaining}**.`
+          );
+        }
+        await env.DB.batch([
+          env.DB.prepare(`UPDATE owned_movies SET is_void = 1 WHERE tmdb_id = ?`).bind(tmdbId),
+          env.DB.prepare(`UPDATE users SET points_remaining = points_remaining - ? WHERE id = ?`)
+            .bind(voidCost, leagueUser.id),
+        ]);
+      }
+
+      try {
+        const standings = await computeStandings(env.DB);
+        const ownerIndex = standings.users.findIndex((u) => u.id === row.owner_user_id);
+        const ownerStanding = ownerIndex >= 0 ? { ...standings.users[ownerIndex], place: ownerIndex + 1 } : null;
+        await postMovieVoided(env.DISCORD_WEBHOOK_URL, {
+          movieTitle: row.title,
+          posterUrl: row.poster_url,
+          ownerUsername: row.owner_username,
+          ownerDiscordId: row.owner_discord_id,
+          ownerStanding,
+        });
+      } catch (e) {
+        console.error("Discord void announcement failed:", e);
+      }
+
+      if (leagueUser.is_admin) {
+        return ephemeral(`Voided **${row.title}** (owned by ${row.owner_username}). Announcement posted.`);
+      }
+      return ephemeral(`Voided **${row.title}** — **${voidCost} pts** deducted. Announcement posted.`);
     }
 
     // ── /upcoming ─────────────────────────────────────────────────────────────
