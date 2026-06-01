@@ -945,8 +945,11 @@ function WeekendPanel() {
   async function suggestLineup() {
     setSuggestingLineup(true);
     setLineupMsg(null);
-    // Pass the current configDate if set, so the user can ask "what opens that weekend?"
-    const r = await apiAdminSuggestLineup(configDate || undefined);
+    // Only pass configDate if it's a future date — past/stale dates are treated
+    // as "no preference" and the backend will default to next Friday.
+    const today = new Date().toISOString().slice(0, 10);
+    const dateToUse = configDate && configDate > today ? configDate : undefined;
+    const r = await apiAdminSuggestLineup(dateToUse);
     setSuggestingLineup(false);
     if (!r.ok) { setLineupMsg({ error: r.data?.error || "Failed to suggest lineup" }); return; }
     const { weekend_date, movies: suggested } = r.data;

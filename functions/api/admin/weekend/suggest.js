@@ -17,13 +17,15 @@ export async function onRequestGet({ request, env }) {
     weekendDate = friday.toISOString().slice(0, 10);
   }
 
-  // Movies releasing Wed–Sun of the target weekend (wide releases sometimes open Wed/Thu)
+  // Only suggest owned movies — unowned movies aren't in the admin catalog
+  // and players only care about predicting movies someone actually drafted.
   const { results: movies } = await env.DB.prepare(
-    `SELECT tmdb_id, title, release_date
-     FROM movies
-     WHERE release_date BETWEEN date(?, '-2 days') AND date(?, '+2 days')
-       AND status != 'complete'
-     ORDER BY title`
+    `SELECT m.tmdb_id, m.title, m.release_date
+     FROM movies m
+     JOIN owned_movies om ON om.tmdb_id = m.tmdb_id AND om.is_void = 0
+     WHERE m.release_date BETWEEN date(?, '-2 days') AND date(?, '+2 days')
+       AND m.status != 'complete'
+     ORDER BY m.title`
   )
     .bind(weekendDate, weekendDate)
     .all();
