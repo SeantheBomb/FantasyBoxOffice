@@ -113,6 +113,8 @@ export const apiAdminScoreMovie = (weekendDate, tmdbId, actualGross, notify = tr
   });
 export const apiAdminWeekendMovies = (weekendDate) =>
   jsonFetch("/api/admin/weekend/movies" + (weekendDate ? `?weekend_date=${weekendDate}` : ""));
+export const apiAdminSuggestLineup = (weekendDate) =>
+  jsonFetch("/api/admin/weekend/suggest" + (weekendDate ? `?weekend_date=${weekendDate}` : ""));
 export const apiAdminSetWeekendMovies = (weekendDate, tmdbIds) =>
   jsonFetch("/api/admin/weekend/movies", {
     method: "POST",

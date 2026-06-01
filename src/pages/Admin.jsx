@@ -11,7 +11,7 @@ import {
   apiAuctions, apiAdminEditAuction, apiAdminDeleteAuction, apiAdminAuditAuction, apiAdminDeleteBid,
   apiGameCatalog,
   apiAdminWeekendScore, apiAdminScoreMovie,
-  apiAdminSetWeekendMovies, apiAdminPostWeekendAnnouncement, apiAdminPostLastCall,
+  apiAdminSuggestLineup, apiAdminSetWeekendMovies, apiAdminPostWeekendAnnouncement, apiAdminPostLastCall,
   apiAdminUpdatePick, apiAdminDeletePick, apiAdminCreatePick,
   apiBettingHistory,
 } from "../api";
@@ -899,6 +899,7 @@ function WeekendPanel() {
   const [lineupIds, setLineupIds] = useState([]);
   const [lineupBusy, setLineupBusy] = useState(false);
   const [lineupMsg, setLineupMsg] = useState(null);
+  const [suggestingLineup, setSuggestingLineup] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -939,6 +940,23 @@ function WeekendPanel() {
     setLineupBusy(false);
     setLineupMsg(r.ok ? { ok: true, text: `Saved ${lineupIds.length} movies for ${configDate}` } : { error: r.data?.error || "Failed" });
     if (r.ok) setVersion((v) => v + 1);
+  }
+
+  async function suggestLineup() {
+    setSuggestingLineup(true);
+    setLineupMsg(null);
+    // Pass the current configDate if set, so the user can ask "what opens that weekend?"
+    const r = await apiAdminSuggestLineup(configDate || undefined);
+    setSuggestingLineup(false);
+    if (!r.ok) { setLineupMsg({ error: r.data?.error || "Failed to suggest lineup" }); return; }
+    const { weekend_date, movies: suggested } = r.data;
+    if (!suggested.length) {
+      setLineupMsg({ error: `No tracked movies found opening around ${weekend_date}` });
+      return;
+    }
+    setConfigDate(weekend_date);
+    setLineupIds(suggested.map((m) => m.tmdb_id));
+    setLineupMsg({ ok: true, text: `Suggested ${suggested.length} movie${suggested.length !== 1 ? "s" : ""} for ${weekend_date} — review and save` });
   }
 
   async function announce() {
@@ -1045,6 +1063,9 @@ function WeekendPanel() {
               style={{ marginLeft: 4 }}
             />
           </label>
+          <button onClick={suggestLineup} disabled={suggestingLineup} title="Auto-fill lineup from catalog movies releasing that Friday">
+            {suggestingLineup ? "Finding..." : "Suggest lineup"}
+          </button>
         </div>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 300px" }}>
