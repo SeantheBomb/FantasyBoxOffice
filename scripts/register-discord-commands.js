@@ -7,6 +7,7 @@
 
 const APP_ID = "1505968596478722230";
 const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
+const GUILD_ID = process.env.DISCORD_GUILD_ID; // optional — clears stale guild-scoped commands if provided
 
 if (!BOT_TOKEN) {
   console.error("Set DISCORD_BOT_TOKEN env var before running.");
@@ -108,6 +109,23 @@ const commands = [
   },
 ];
 
+// Clear stale guild-scoped commands first (if guild ID provided).
+if (GUILD_ID) {
+  const guildUrl = `https://discord.com/api/v10/applications/${APP_ID}/guilds/${GUILD_ID}/commands`;
+  const guildRes = await fetch(guildUrl, {
+    method: "PUT",
+    headers: { Authorization: `Bot ${BOT_TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify([]),
+  });
+  if (guildRes.ok) {
+    console.log(`Cleared guild-scoped commands for guild ${GUILD_ID}`);
+  } else {
+    const err = await guildRes.json().catch(() => ({}));
+    console.warn("Warning: could not clear guild commands:", JSON.stringify(err));
+  }
+}
+
+// Register (or overwrite) all global commands.
 const url = `https://discord.com/api/v10/applications/${APP_ID}/commands`;
 
 const res = await fetch(url, {
@@ -125,7 +143,7 @@ if (!res.ok) {
   process.exit(1);
 }
 
-console.log("Commands registered:");
+console.log("Global commands registered:");
 for (const cmd of data) {
   console.log(`  /${cmd.name} (id: ${cmd.id})`);
 }
