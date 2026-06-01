@@ -96,7 +96,7 @@ const commands = [
   },
   {
     name: "void",
-    description: "Void one of your owned movies (costs 2× its purchase price). Admins can void anyone's movie free.",
+    description: "Void one of your owned movies (costs 2× its purchase price). Admins can void any player's movie.",
     options: [
       {
         name: "movie",
