@@ -51,10 +51,12 @@ export default {
       ctx.waitUntil(runSettleExpired(env));
     } else if (job === "standings") {
       ctx.waitUntil(runStandingsPost(env));
+    } else if (job === "standings-quick") {
+      ctx.waitUntil(runStandingsPost(env, { skipBackfill: true }));
     } else if (job === "lastcall") {
       ctx.waitUntil(runLastCallPost(env));
     } else {
-      return new Response("job must be movies|dailies|settle|standings|lastcall", { status: 400 });
+      return new Response("job must be movies|dailies|settle|standings|standings-quick|lastcall", { status: 400 });
     }
     return new Response(JSON.stringify({ started: job }), {
       headers: { "Content-Type": "application/json" },

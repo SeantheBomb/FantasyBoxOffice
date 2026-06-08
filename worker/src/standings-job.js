@@ -15,7 +15,10 @@ import {
 } from "../../functions/api/_discord.js";
 import { scoreMovie } from "../../functions/api/_weekend-scoring.js";
 
-export async function runStandingsPost(env) {
+// runStandingsPost({ skipBackfill: true }) skips the BOM backfill — use for
+// manual triggers where the daily cron has already refreshed the data and
+// the 30-second waitUntil limit on HTTP-triggered Workers would be exceeded.
+export async function runStandingsPost(env, { skipBackfill = false } = {}) {
   if (!env.DISCORD_WEBHOOK_URL) return { error: "DISCORD_WEBHOOK_URL missing" };
 
   // Backfill BOM weekly history FIRST — auto-scoring depends on this data to
@@ -24,7 +27,9 @@ export async function runStandingsPost(env) {
   // weekly release chart for every tracked movie, so the very first entry after
   // weekend_date reflects the true opening weekend gross.
   let dailiesResult = null;
-  if (env.TMDB_TOKEN) {
+  if (skipBackfill) {
+    dailiesResult = { skipped: "skipBackfill=true" };
+  } else if (env.TMDB_TOKEN) {
     try {
       dailiesResult = await backfillDailies({ db: env.DB, token: env.TMDB_TOKEN });
     } catch (e) {
