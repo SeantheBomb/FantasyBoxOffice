@@ -95,11 +95,11 @@ export async function onRequestPost({ request, env }) {
 
   const notify = body.notify !== false; // default true
   const correction = !!body.correction;
-  if (notify && env.DISCORD_GAME_FEED_WEBHOOK_URL) {
+  if (notify && env.DISCORD_WEBHOOK_URL) {
     const content = correction
       ? `⚠️ **CORRECTION** — The previous result for this movie was incorrect.\n\n${result.content}`
       : result.content;
-    await fetch(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
+    await fetch(env.DISCORD_WEBHOOK_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content }),

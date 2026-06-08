@@ -166,11 +166,12 @@ async function autoScoreWeekendPicks(env) {
         actual_gross,
       });
 
-      await fetch(env.DISCORD_WEBHOOK_URL, {
+      const res = await fetch(env.DISCORD_WEBHOOK_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: result.content }),
       });
+      if (!res.ok) throw new Error(`Discord ${res.status}: ${await res.text().catch(() => res.statusText)}`);
 
       results.push({ tmdb_id: movie.tmdb_id, title: movie.title, actual_gross });
     } catch (e) {
