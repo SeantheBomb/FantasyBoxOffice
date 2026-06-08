@@ -34,21 +34,29 @@ export default {
     }
   },
 
-  // Manual trigger for local testing: POST /trigger?job=movies|dailies|settle|standings
-  async fetch(request, env) {
+  // Manual trigger: GET /trigger?job=movies|dailies|settle|standings|lastcall
+  // Long-running jobs (standings, dailies) use ctx.waitUntil so the HTTP
+  // response returns immediately — results appear in the Worker logs, not here.
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname !== "/trigger") {
       return new Response("fbo-cron: use /trigger?job=...", { status: 200 });
     }
     const job = url.searchParams.get("job");
-    let result;
-    if (job === "movies") result = await runMoviesRefresh(env);
-    else if (job === "dailies") result = await runDailiesRefresh(env);
-    else if (job === "settle") result = await runSettleExpired(env);
-    else if (job === "standings") result = await runStandingsPost(env);
-    else if (job === "lastcall") result = await runLastCallPost(env);
-    else return new Response("job must be movies|dailies|settle|standings|lastcall", { status: 400 });
-    return new Response(JSON.stringify(result), {
+    if (job === "movies") {
+      ctx.waitUntil(runMoviesRefresh(env));
+    } else if (job === "dailies") {
+      ctx.waitUntil(runDailiesRefresh(env));
+    } else if (job === "settle") {
+      ctx.waitUntil(runSettleExpired(env));
+    } else if (job === "standings") {
+      ctx.waitUntil(runStandingsPost(env));
+    } else if (job === "lastcall") {
+      ctx.waitUntil(runLastCallPost(env));
+    } else {
+      return new Response("job must be movies|dailies|settle|standings|lastcall", { status: 400 });
+    }
+    return new Response(JSON.stringify({ started: job }), {
       headers: { "Content-Type": "application/json" },
     });
   },
