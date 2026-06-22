@@ -117,23 +117,62 @@ function TitleReveal({ titleLength, revealedPositions, eliminatedLetters, won, a
   );
 }
 
-function HintBadge({ label, match, details }) {
-  const displayLabel = match && details?.length
-    ? `${label}: ${details.join(", ")}`
-    : label;
+function HintBadge({ label, match }) {
   return (
     <span style={{
-      display: "inline-block",
-      padding: "2px 8px",
-      borderRadius: 4,
-      fontSize: 12,
-      fontWeight: 600,
+      display: "inline-block", padding: "2px 8px", borderRadius: 4,
+      fontSize: 11, fontWeight: 600,
       background: match ? "rgba(99, 211, 122, 0.15)" : "rgba(255, 107, 107, 0.15)",
       color: match ? "#63d37a" : "#ff6b6b",
       border: `1px solid ${match ? "rgba(99, 211, 122, 0.3)" : "rgba(255, 107, 107, 0.3)"}`,
     }}>
-      {match ? "✓" : "✗"} {displayLabel}
+      {match ? "✓" : "✗"} {label}
     </span>
+  );
+}
+
+function GuessHints({ guess }) {
+  const matchingSet = new Set(guess.matching_genres || []);
+  const allGenres = guess.guessed_genres || [];
+  return (
+    <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 4 }}>
+      {/* Genres — each one individually marked */}
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ fontSize: 11, color: "var(--fbo-text-muted)", width: 42, flexShrink: 0 }}>Genre</span>
+        {allGenres.length > 0 ? allGenres.map((g) => (
+          <HintBadge key={g} label={g} match={matchingSet.has(g)} />
+        )) : (
+          <HintBadge label="None" match={false} />
+        )}
+      </div>
+      {/* Studio */}
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ fontSize: 11, color: "var(--fbo-text-muted)", width: 42, flexShrink: 0 }}>Studio</span>
+        {(guess.guessed_companies || []).length > 0 ? (
+          <>
+            {guess.company_match && (guess.matching_companies || []).map((c) => (
+              <HintBadge key={c} label={c} match={true} />
+            ))}
+            {!guess.company_match && (
+              <span style={{ fontSize: 11, color: "var(--fbo-text-muted)" }}>
+                {(guess.guessed_companies || []).join(", ")}
+              </span>
+            )}
+          </>
+        ) : (
+          <span style={{ fontSize: 11, color: "var(--fbo-text-muted)" }}>Unknown</span>
+        )}
+      </div>
+      {/* Actors */}
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ fontSize: 11, color: "var(--fbo-text-muted)", width: 42, flexShrink: 0 }}>Actor</span>
+        {guess.cast_match ? (guess.matching_cast || []).map((c) => (
+          <HintBadge key={c} label={c} match={true} />
+        )) : (
+          <HintBadge label="No match" match={false} />
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -333,6 +372,8 @@ export default function MovieGuesser() {
       matching_genres: res.data.matching_genres || [],
       matching_companies: res.data.matching_companies || [],
       matching_cast: res.data.matching_cast || [],
+      guessed_genres: res.data.guessed_genres || [],
+      guessed_companies: res.data.guessed_companies || [],
       revealed_positions: res.data.revealed_positions || [],
       eliminated_letters: res.data.eliminated_letters || [],
     };
@@ -342,23 +383,23 @@ export default function MovieGuesser() {
 
     if (res.data.correct) {
       setWon(true);
-      setAnswer({
+      const answerData = {
         title: res.data.title,
         poster_url: res.data.poster_url,
         release_date: res.data.release_date,
         revenue: res.data.revenue,
         genres: res.data.genres,
-      });
+        production_companies: res.data.production_companies || [],
+        top_cast: res.data.top_cast || [],
+      };
+      setAnswer(answerData);
 
       if (!reportedRef.current) {
         const completeRes = await apiGuesserComplete(newGuesses.length);
         if (completeRes.ok) setStats(completeRes.data.stats);
         reportedRef.current = true;
       }
-      storeGame(puzzle.game_date, { guesses: newGuesses, won: true, answer: {
-        title: res.data.title, poster_url: res.data.poster_url,
-        release_date: res.data.release_date, revenue: res.data.revenue, genres: res.data.genres,
-      }, reported: true });
+      storeGame(puzzle.game_date, { guesses: newGuesses, won: true, answer: answerData, reported: true });
     } else {
       storeGame(puzzle.game_date, { guesses: newGuesses, won: false });
     }
@@ -449,8 +490,18 @@ export default function MovieGuesser() {
             Solved in {guesses.length} guess{guesses.length !== 1 ? "es" : ""}!
           </p>
           {answer.genres && (
-            <p style={{ margin: "0 0 12px", fontSize: 12, color: "var(--fbo-text-muted)" }}>
+            <p style={{ margin: "0 0 4px", fontSize: 12, color: "var(--fbo-text-muted)" }}>
               {answer.genres.join(" · ")}
+            </p>
+          )}
+          {answer.production_companies?.length > 0 && (
+            <p style={{ margin: "0 0 4px", fontSize: 12, color: "var(--fbo-text-muted)" }}>
+              {answer.production_companies.join(" · ")}
+            </p>
+          )}
+          {answer.top_cast?.length > 0 && (
+            <p style={{ margin: "0 0 12px", fontSize: 12, color: "var(--fbo-text-muted)" }}>
+              {answer.top_cast.slice(0, 5).join(" · ")}
             </p>
           )}
           <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
@@ -542,13 +593,7 @@ export default function MovieGuesser() {
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 500 }}>{g.title}</div>
-                  {!g.correct && (
-                    <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
-                      <HintBadge label="Genre" match={g.genre_match} details={g.matching_genres} />
-                      <HintBadge label="Studio" match={g.company_match} details={g.matching_companies} />
-                      <HintBadge label="Actor" match={g.cast_match} details={g.matching_cast} />
-                    </div>
-                  )}
+                  {!g.correct && <GuessHints guess={g} />}
                 </div>
               </div>
             ))}

@@ -191,6 +191,8 @@ export async function compareMovies(answer, guessedTmdbId, token) {
     matching_genres: matchingGenres,
     matching_companies: matchingCompanies,
     matching_cast: matchingCast,
+    guessed_genres: guessGenres,
+    guessed_companies: guessCompanies,
     revealed_positions: letters.revealed,
     eliminated_letters: letters.eliminated,
   };

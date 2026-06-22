@@ -20,6 +20,8 @@ export async function onRequestPost({ request, env }) {
       release_date: answer.release_date,
       revenue: answer.revenue,
       genres: JSON.parse(answer.genres),
+      production_companies: JSON.parse(answer.production_companies),
+      top_cast: JSON.parse(answer.top_cast),
     });
   }
 
