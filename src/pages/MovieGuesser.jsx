@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useUser } from "../useUser";
 import { apiGuesserToday, apiGuesserGuess, apiGuesserSearch, apiGuesserComplete } from "../api";
 
 const STORAGE_KEY = "fbo_guesser_";
@@ -189,6 +190,7 @@ function formatSearchResults(results) {
 }
 
 export default function MovieGuesser() {
+  const { user } = useUser();
   const [puzzle, setPuzzle] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -571,6 +573,22 @@ export default function MovieGuesser() {
       )}
 
       <StatsPanel stats={stats} />
+
+      {user?.is_admin && puzzle && (
+        <button onClick={() => {
+          localStorage.removeItem(STORAGE_KEY + puzzle.game_date);
+          setGuesses([]);
+          setWon(false);
+          setAnswer(null);
+          reportedRef.current = false;
+        }} style={{
+          marginTop: 16, padding: "6px 14px", borderRadius: 4, border: "1px solid var(--fbo-border)",
+          background: "var(--fbo-bg-panel)", color: "var(--fbo-text-muted)", fontSize: 12,
+          cursor: "pointer", display: "block", width: "100%",
+        }}>
+          Reset Today's Game (Admin)
+        </button>
+      )}
     </div>
   );
 }
