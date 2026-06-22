@@ -1,251 +1,260 @@
-/* Movie Guesser — cinema marquee skin.
-   Extends the FBO theater aesthetic with marquee lights,
-   curtain textures, and film-strip accents. */
+/* Movie Guesser — cinema lobby aesthetic.
+   Film-strip perforations, ticket stubs, velvet textures,
+   art-deco ornaments. Avoids the uniform-card-soup look. */
 
 .mg-page {
-  max-width: 580px;
+  max-width: 560px;
   margin: 0 auto;
-  padding: 24px 16px;
+  padding: 28px 16px 40px;
 }
 
 /* ── Marquee header ── */
 .mg-marquee {
   text-align: center;
-  padding: 20px 16px 18px;
-  margin-bottom: 20px;
+  padding: 22px 24px 18px;
+  margin-bottom: 24px;
   background:
     repeating-linear-gradient(90deg, #2a0c12 0 14px, #3a1018 14px 28px);
-  border: 3px double var(--fbo-gold);
-  border-radius: 8px;
+  border-top: 4px solid var(--fbo-gold);
+  border-bottom: 4px solid var(--fbo-gold);
   box-shadow:
-    0 0 20px rgba(245, 210, 122, 0.08),
-    inset 0 0 30px rgba(0, 0, 0, 0.4);
+    0 4px 20px rgba(0, 0, 0, 0.5),
+    inset 0 0 40px rgba(0, 0, 0, 0.5);
   position: relative;
 }
+/* Film-strip perforation holes along top and bottom edges */
 .mg-marquee::before,
 .mg-marquee::after {
   content: "";
   position: absolute;
-  top: -3px;
-  bottom: -3px;
-  width: 20px;
+  left: 10px;
+  right: 10px;
+  height: 6px;
   background:
-    radial-gradient(circle 3px at 10px 8px, var(--fbo-gold) 60%, transparent 61%),
-    radial-gradient(circle 3px at 10px 24px, var(--fbo-gold-soft) 60%, transparent 61%),
-    radial-gradient(circle 3px at 10px 40px, var(--fbo-gold) 60%, transparent 61%),
-    radial-gradient(circle 3px at 10px 56px, var(--fbo-gold-soft) 60%, transparent 61%),
-    radial-gradient(circle 3px at 10px 72px, var(--fbo-gold) 60%, transparent 61%);
-  background-size: 20px 16px;
-  opacity: 0.5;
+    repeating-linear-gradient(90deg,
+      var(--fbo-bg) 0 6px,
+      transparent 6px 16px
+    );
 }
-.mg-marquee::before { left: -1px; }
-.mg-marquee::after { right: -1px; }
+.mg-marquee::before { top: -5px; }
+.mg-marquee::after { bottom: -5px; }
 
 .mg-title {
   font-family: "Georgia", serif;
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 900;
   color: var(--fbo-gold);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  margin: 0 0 2px;
-  text-shadow: 0 0 10px rgba(245, 210, 122, 0.3);
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-shadow: 0 2px 12px rgba(245, 210, 122, 0.25);
 }
+/* Art-deco diamond ornament instead of generic underline */
 .mg-title::after {
-  content: "";
+  content: "◆ ◆ ◆";
   display: block;
-  width: 50px;
-  height: 2px;
-  background: var(--fbo-red-soft);
-  margin: 6px auto 0;
+  font-size: 6px;
+  letter-spacing: 8px;
+  color: var(--fbo-red-soft);
+  margin-top: 8px;
 }
 
 .mg-subtitle {
   font-size: 12px;
   color: var(--fbo-text-muted);
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  margin: 8px 0 0;
+  letter-spacing: 0.06em;
+  margin: 6px 0 0;
+  font-style: italic;
 }
 
 /* ── Now Showing clue card ── */
 .mg-clue-card {
-  background:
-    linear-gradient(135deg, rgba(143, 28, 42, 0.08) 0%, transparent 50%),
-    var(--fbo-bg-card);
-  border-radius: 8px;
-  padding: 24px 20px;
-  border: 1px solid var(--fbo-border);
-  margin-bottom: 16px;
+  background: var(--fbo-bg-card);
+  padding: 28px 24px 24px;
+  margin-bottom: 18px;
   text-align: center;
   position: relative;
+  /* Ticket stub: straight top, notched sides, torn bottom */
+  border: none;
+  border-top: 2px solid var(--fbo-gold-soft);
+  border-radius: 0;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+/* Dashed "tear line" at the bottom */
+.mg-clue-card::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 12px;
+  right: 12px;
+  border-bottom: 2px dashed var(--fbo-border);
 }
 .mg-clue-card::before {
-  content: "NOW SHOWING";
+  content: "— NOW SHOWING —";
   display: block;
-  font-size: 10px;
-  letter-spacing: 0.3em;
+  font-size: 9px;
+  letter-spacing: 0.25em;
   color: var(--fbo-red-soft);
-  margin-bottom: 12px;
+  margin-bottom: 14px;
   font-weight: 700;
+  font-family: "Georgia", serif;
 }
 .mg-clue-label {
   font-size: 11px;
   color: var(--fbo-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.15em;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 .mg-clue-date {
   font-family: "Georgia", serif;
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
   color: var(--fbo-text);
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 .mg-clue-revenue {
   font-family: "Georgia", serif;
-  font-size: 26px;
+  font-size: 28px;
   font-weight: 900;
   color: var(--fbo-gold);
-  text-shadow: 0 0 8px rgba(245, 210, 122, 0.2);
+  letter-spacing: 0.02em;
 }
 
 /* ── Title reveal (Hangman) ── */
 .mg-title-reveal {
-  background: var(--fbo-bg-card);
-  border-radius: 8px;
-  padding: 16px;
-  border: 1px solid var(--fbo-border);
-  margin-bottom: 16px;
+  background: transparent;
+  padding: 14px 0;
+  margin-bottom: 14px;
+  border: none;
+  border-bottom: 1px solid var(--fbo-border);
 }
 .mg-title-reveal-label {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--fbo-text-muted);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   text-align: center;
-  text-transform: uppercase;
-  letter-spacing: 0.15em;
+  font-style: italic;
 }
 .mg-letter-grid {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 3px;
+  gap: 4px;
   margin-bottom: 10px;
 }
 .mg-letter {
   width: 24px;
-  height: 30px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
-  font-family: "Georgia", serif;
-  border-radius: 3px;
+  font-size: 16px;
+  font-family: "Courier New", "Consolas", monospace;
+  font-weight: 700;
 }
 .mg-letter--blank {
-  color: var(--fbo-text-muted);
-  background: var(--fbo-bg-panel);
-  border: 1px solid var(--fbo-border);
+  color: #4a3d55;
+  background: none;
+  border-bottom: 2px solid #4a3d55;
+  border-radius: 0;
 }
 .mg-letter--revealed {
   color: var(--fbo-gold);
-  font-weight: 700;
-  background: rgba(245, 210, 122, 0.12);
-  border: 1px solid rgba(245, 210, 122, 0.35);
-  text-shadow: 0 0 6px rgba(245, 210, 122, 0.3);
+  background: none;
+  border-bottom: 2px solid var(--fbo-gold-soft);
+  border-radius: 0;
 }
 .mg-letter--won {
-  color: var(--fbo-success);
-  font-weight: 700;
-  background: rgba(99, 211, 122, 0.12);
-  border: 1px solid rgba(99, 211, 122, 0.3);
+  color: var(--fbo-gold);
+  background: none;
+  border-bottom: 2px solid var(--fbo-gold-soft);
+  border-radius: 0;
 }
 
 .mg-eliminated {
   text-align: center;
-  margin-top: 4px;
+  margin-top: 6px;
 }
 .mg-eliminated-label {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--fbo-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
   margin-right: 6px;
+  font-style: italic;
 }
 .mg-eliminated-letter {
   display: inline-block;
-  width: 20px;
-  height: 20px;
-  line-height: 20px;
+  width: 18px;
+  height: 18px;
+  line-height: 18px;
   text-align: center;
   font-size: 11px;
   font-weight: 600;
-  color: #ff6b6b;
-  background: rgba(255, 107, 107, 0.1);
-  border-radius: 3px;
-  margin: 0 2px;
+  font-family: "Courier New", monospace;
+  color: #665060;
+  background: none;
+  border-radius: 0;
+  margin: 0 1px;
   text-decoration: line-through;
 }
 
 /* ── Win state ── */
 .mg-win {
-  background:
-    radial-gradient(ellipse at top, rgba(99, 211, 122, 0.06) 0%, transparent 60%),
-    var(--fbo-bg-card);
-  border-radius: 8px;
-  padding: 24px 20px;
-  border: 2px solid rgba(99, 211, 122, 0.3);
-  margin-bottom: 20px;
+  background: var(--fbo-bg-card);
+  padding: 28px 24px;
+  border: none;
+  border-left: 3px solid var(--fbo-gold);
+  border-radius: 0;
+  margin-bottom: 24px;
   text-align: center;
-  box-shadow: 0 0 24px rgba(99, 211, 122, 0.06);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 .mg-win-poster {
-  width: 140px;
-  border-radius: 6px;
-  margin-bottom: 14px;
-  box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.5),
-    0 0 0 2px rgba(245, 210, 122, 0.2);
+  width: 150px;
+  border-radius: 2px;
+  margin-bottom: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
 }
 .mg-win-title {
-  margin: 0 0 4px;
+  margin: 0 0 6px;
   font-size: 22px;
   font-family: "Georgia", serif;
   color: var(--fbo-gold);
+  letter-spacing: 0.02em;
 }
 .mg-win-score {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
   font-size: 14px;
-  color: var(--fbo-success);
-  font-weight: 600;
+  color: var(--fbo-text);
+  font-weight: 400;
 }
+.mg-win-score::before { content: "— "; color: var(--fbo-text-muted); }
+.mg-win-score::after { content: " —"; color: var(--fbo-text-muted); }
 .mg-win-meta {
-  margin: 0 0 4px;
+  margin: 0 0 3px;
   font-size: 12px;
   color: var(--fbo-text-muted);
+  font-style: italic;
 }
 .mg-win-countdown {
-  margin-top: 14px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--fbo-border);
   font-size: 12px;
   color: var(--fbo-text-muted);
-  letter-spacing: 0.05em;
 }
 
 /* ── Search input ── */
 .mg-search-wrap {
   position: relative;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 .mg-search-input {
   width: 100%;
-  padding: 12px 16px;
-  border-radius: 6px;
-  border: 1px solid var(--fbo-border);
-  background: var(--fbo-bg-panel);
+  padding: 11px 16px;
+  border-radius: 0;
+  border: none;
+  border-bottom: 2px solid var(--fbo-border);
+  background: transparent;
   color: var(--fbo-text);
-  font-size: 15px;
+  font-size: 16px;
   font-family: inherit;
   text-transform: none;
   font-weight: 400;
@@ -253,11 +262,11 @@
 }
 .mg-search-input:focus {
   outline: none;
-  border-color: var(--fbo-gold-soft);
-  box-shadow: 0 0 0 2px rgba(245, 210, 122, 0.15);
+  border-bottom-color: var(--fbo-gold-soft);
+  box-shadow: none;
 }
 .mg-search-input::placeholder {
-  color: var(--fbo-text-muted);
+  color: #5a4d64;
   font-style: italic;
 }
 
@@ -270,7 +279,7 @@
   background: var(--fbo-bg-panel);
   border: 1px solid var(--fbo-border);
   border-top: none;
-  border-radius: 0 0 6px 6px;
+  border-radius: 0;
   max-height: 300px;
   overflow-y: auto;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
@@ -281,17 +290,19 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  transition: background 0.1s;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
 }
+.mg-dropdown-item:last-child { border-bottom: none; }
 .mg-dropdown-item:hover,
 .mg-dropdown-item--selected {
-  background: var(--fbo-bg-card);
+  background: rgba(245, 210, 122, 0.04);
 }
 .mg-dropdown-poster {
   width: 28px;
   height: 42px;
-  border-radius: 3px;
+  border-radius: 1px;
   object-fit: cover;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 .mg-dropdown-title {
   font-size: 14px;
@@ -299,7 +310,7 @@
 }
 .mg-search-spinner {
   position: absolute;
-  right: 14px;
+  right: 0;
   top: 14px;
   color: var(--fbo-text-muted);
   font-size: 11px;
@@ -308,61 +319,56 @@
 
 /* ── Guess history ── */
 .mg-guesses-header {
-  font-size: 12px;
+  font-size: 13px;
+  font-family: "Georgia", serif;
   color: var(--fbo-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.15em;
-  margin: 0 0 10px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--fbo-border);
+  margin: 0 0 12px;
+  font-style: italic;
 }
 .mg-guesses-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
 }
 .mg-guess {
-  background: var(--fbo-bg-card);
-  border-radius: 6px;
-  padding: 10px 14px;
-  border: 1px solid var(--fbo-border);
+  background: transparent;
+  border-radius: 0;
+  padding: 12px 0;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 12px;
 }
+.mg-guess:last-child { border-bottom: none; }
 .mg-guess--correct {
-  background:
-    linear-gradient(135deg, rgba(99, 211, 122, 0.06) 0%, transparent 50%),
-    var(--fbo-bg-card);
-  border-color: rgba(99, 211, 122, 0.3);
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.05);
 }
 .mg-guess-num {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 700;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-.mg-guess-num--wrong {
-  background: var(--fbo-bg-panel);
+  width: 20px;
+  font-family: "Georgia", serif;
+  font-size: 13px;
+  font-weight: 400;
   color: var(--fbo-text-muted);
+  flex-shrink: 0;
+  margin-top: 4px;
+  /* No circle, just the number */
+  display: block;
+  text-align: right;
+  background: none;
+  border-radius: 0;
+  height: auto;
 }
-.mg-guess-num--correct {
-  background: var(--fbo-success);
-  color: #1a0000;
-}
+.mg-guess-num--wrong { color: var(--fbo-text-muted); }
+.mg-guess-num--correct { color: var(--fbo-gold); background: none; }
 .mg-guess-poster {
-  width: 34px;
-  height: 50px;
-  border-radius: 3px;
+  width: 36px;
+  height: 54px;
+  border-radius: 1px;
   object-fit: cover;
   flex-shrink: 0;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
 }
 .mg-guess-body {
   flex: 1;
@@ -372,6 +378,7 @@
   font-size: 14px;
   font-weight: 600;
   font-family: "Georgia", serif;
+  color: var(--fbo-text);
 }
 
 /* ── Hint rows ── */
@@ -379,64 +386,66 @@
   margin-top: 6px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 .mg-hint-row {
   display: flex;
   gap: 4px;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: baseline;
 }
 .mg-hint-label {
   font-size: 10px;
-  color: var(--fbo-text-muted);
-  width: 40px;
+  color: #665060;
+  width: 38px;
   flex-shrink: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-style: italic;
 }
 .mg-badge {
   display: inline-block;
-  padding: 1px 7px;
-  border-radius: 3px;
+  padding: 1px 6px;
+  border-radius: 2px;
   font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-weight: 500;
 }
 .mg-badge--match {
-  background: rgba(99, 211, 122, 0.15);
+  background: rgba(99, 211, 122, 0.12);
   color: #63d37a;
-  border: 1px solid rgba(99, 211, 122, 0.3);
+  border: none;
+  border-left: 2px solid #63d37a;
 }
 .mg-badge--miss {
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--fbo-text-muted);
-  border: 1px solid var(--fbo-border);
-  opacity: 0.6;
+  background: none;
+  color: #5a4d64;
+  border: none;
+  font-weight: 400;
 }
 
 /* ── How to play ── */
 .mg-howto {
-  background:
-    linear-gradient(135deg, rgba(143, 28, 42, 0.05) 0%, transparent 50%),
-    var(--fbo-bg-card);
-  border-radius: 8px;
-  padding: 18px 20px;
-  border: 1px solid var(--fbo-border);
+  background: transparent;
+  border: none;
+  border-left: 2px solid var(--fbo-red);
+  border-radius: 0;
+  padding: 0 0 0 16px;
+  margin-top: 4px;
   font-size: 13px;
   color: var(--fbo-text-muted);
 }
 .mg-howto h3 {
-  margin: 0 0 10px;
-  font-size: 13px;
-  color: var(--fbo-gold);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--fbo-text);
+  font-family: "Georgia", serif;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 600;
 }
+.mg-howto h3::after { display: none; }
 .mg-howto ul {
   margin: 0;
-  padding-left: 18px;
-  line-height: 1.9;
+  padding-left: 16px;
+  line-height: 1.8;
 }
 .mg-howto b {
   color: var(--fbo-gold-soft);
@@ -445,35 +454,38 @@
 
 /* ── Stats panel ── */
 .mg-stats {
-  background: var(--fbo-bg-card);
-  border-radius: 8px;
-  padding: 16px;
-  border: 1px solid var(--fbo-border);
-  margin-top: 16px;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--fbo-border);
+  border-radius: 0;
+  padding: 16px 0 0;
+  margin-top: 20px;
 }
 .mg-stats-title {
   margin: 0 0 10px;
-  font-size: 13px;
-  color: var(--fbo-gold);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  font-size: 14px;
+  font-family: "Georgia", serif;
+  color: var(--fbo-text-muted);
+  font-style: italic;
+  text-transform: none;
+  letter-spacing: normal;
 }
+.mg-stats-title::after { display: none; }
 .mg-stats-summary {
   display: flex;
-  gap: 20px;
+  gap: 16px;
   font-size: 12px;
   margin-bottom: 12px;
   flex-wrap: wrap;
-  color: var(--fbo-text-muted);
 }
 .mg-stats-summary span {
-  color: var(--fbo-text);
+  color: var(--fbo-text-muted);
 }
 .mg-distribution {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  margin-bottom: 12px;
+  gap: 2px;
+  margin-bottom: 14px;
 }
 .mg-dist-row {
   display: flex;
@@ -482,38 +494,42 @@
   font-size: 12px;
 }
 .mg-dist-label {
-  width: 18px;
+  width: 16px;
   text-align: right;
   color: var(--fbo-text-muted);
   font-size: 11px;
+  font-family: "Georgia", serif;
 }
 .mg-dist-bar {
-  height: 14px;
-  border-radius: 2px;
-  background: linear-gradient(90deg, var(--fbo-gold-soft), var(--fbo-gold));
+  height: 12px;
+  border-radius: 0;
+  background: var(--fbo-gold-soft);
   display: flex;
   align-items: center;
   justify-content: flex-end;
   padding-right: 4px;
-  font-size: 10px;
+  font-size: 9px;
   color: #1a0000;
   font-weight: 700;
-  min-width: 18px;
+  min-width: 16px;
 }
 .mg-movies-header {
   margin: 0 0 6px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--fbo-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  font-style: italic;
+  text-transform: none;
+  letter-spacing: normal;
 }
 .mg-movie-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-size: 12px;
-  padding: 2px 0;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
 }
+.mg-movie-row:last-child { border-bottom: none; }
 .mg-movie-row span:first-child {
   color: var(--fbo-text);
 }
@@ -528,19 +544,22 @@
 .mg-admin-bar {
   display: flex;
   gap: 8px;
-  margin-top: 16px;
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid var(--fbo-border);
 }
 .mg-admin-btn {
   flex: 1;
   padding: 6px 14px;
-  border-radius: 4px;
+  border-radius: 0 !important;
   border: 1px solid var(--fbo-border) !important;
-  background: var(--fbo-bg-panel) !important;
+  background: transparent !important;
   color: var(--fbo-text-muted) !important;
   font-size: 11px !important;
   cursor: pointer;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  text-transform: none;
+  letter-spacing: normal;
+  font-style: italic;
 }
 .mg-admin-btn:hover {
   border-color: var(--fbo-gold-soft) !important;
@@ -549,19 +568,25 @@
 
 /* ── Share button ── */
 .mg-share-btn {
-  padding: 10px 24px !important;
-  border-radius: 4px;
-  border: 1px solid #b58d37 !important;
-  font-size: 13px !important;
-  letter-spacing: 0.08em;
+  padding: 10px 28px !important;
+  border-radius: 0 !important;
+  border: 2px solid var(--fbo-gold) !important;
+  background: transparent !important;
+  color: var(--fbo-gold) !important;
+  font-size: 12px !important;
+  letter-spacing: 0.1em;
+}
+.mg-share-btn:hover {
+  background: var(--fbo-gold) !important;
+  color: #1a0000 !important;
 }
 
 /* ── Responsive ── */
 @media (max-width: 500px) {
-  .mg-marquee { padding: 16px 12px 14px; }
-  .mg-title { font-size: 22px; letter-spacing: 0.08em; }
-  .mg-clue-date { font-size: 20px; }
-  .mg-clue-revenue { font-size: 22px; }
-  .mg-letter { width: 20px; height: 26px; font-size: 13px; }
-  .mg-guess-poster { width: 28px; height: 42px; }
+  .mg-marquee { padding: 18px 14px 14px; }
+  .mg-title { font-size: 22px; }
+  .mg-clue-date { font-size: 19px; }
+  .mg-clue-revenue { font-size: 24px; }
+  .mg-letter { width: 20px; height: 28px; font-size: 14px; }
+  .mg-guess-poster { width: 30px; height: 44px; }
 }
