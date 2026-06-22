@@ -137,26 +137,21 @@ export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
   return row;
 }
 
-// Compare guessed title against answer for Hangman-style letter reveals.
-// Returns positions where the guess has the correct letter, and letters
-// that don't appear anywhere in the answer.
+// Hangman-style letter reveals: any letter present in the guessed title
+// reveals ALL of its positions in the answer title.
 function compareLetters(answerTitle, guessTitle) {
   const aLower = answerTitle.toLowerCase();
-  const gLower = guessTitle.toLowerCase();
+  const guessLetters = new Set(guessTitle.toLowerCase().replace(/[^a-z]/g, "").split(""));
+  const answerLetters = new Set(aLower.replace(/[^a-z]/g, "").split(""));
 
-  // Positional matches (case-insensitive)
   const revealed = [];
-  for (let i = 0; i < Math.min(aLower.length, gLower.length); i++) {
-    if (aLower[i] === gLower[i]) {
+  for (let i = 0; i < aLower.length; i++) {
+    if (guessLetters.has(aLower[i])) {
       revealed.push({ index: i, char: answerTitle[i] });
     }
   }
 
-  // Letters in the guess that don't appear anywhere in the answer (letters only)
-  const answerLetters = new Set(aLower.replace(/[^a-z]/g, "").split(""));
-  const guessLetters = new Set(gLower.replace(/[^a-z]/g, "").split(""));
   const eliminated = [...guessLetters].filter((l) => !answerLetters.has(l));
-
   return { revealed, eliminated };
 }
 
