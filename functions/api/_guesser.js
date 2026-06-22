@@ -19,8 +19,9 @@ function dateToSeed(dateStr) {
   return h;
 }
 
-// Pick today's movie: discover movies released on this month/day in prior years.
-// Cache the result in guesser_daily so all players see the same movie.
+// Pick today's movie. Strategy: search a handful of prior years for movies
+// released in a ±3 day window around today's month/day. One discover call
+// per year-window keeps us well under Cloudflare's subrequest limit.
 export async function getOrCreateDailyMovie(db, token, gameDate) {
   const existing = await db
     .prepare("SELECT * FROM guesser_daily WHERE game_date = ?")
@@ -28,64 +29,63 @@ export async function getOrCreateDailyMovie(db, token, gameDate) {
     .first();
   if (existing) return existing;
 
-  const [month, day] = gameDate.slice(5).split("-");
   const currentYear = parseInt(gameDate.slice(0, 4), 10);
+  const mmdd = gameDate.slice(5); // "MM-DD"
 
-  // Search across several prior years for movies released on this month/day
+  // Build candidate pool: check ~6 years spread across the range.
+  // Each call covers a 7-day window (±3 days) to maximize hits.
   const candidates = [];
-  const yearsToSearch = [];
-  for (let y = currentYear - 1; y >= currentYear - 20 && y >= 1995; y--) {
-    yearsToSearch.push(y);
-  }
+  const yearsToSearch = [
+    currentYear - 1, currentYear - 3, currentYear - 5,
+    currentYear - 8, currentYear - 12, currentYear - 18,
+  ].filter((y) => y >= 1995);
 
-  // Search each prior year for movies released on this month/day.
-  // TMDB discover doesn't return revenue in list results, so we collect
-  // candidates here and filter by revenue after fetching detail.
-  for (let i = 0; i < yearsToSearch.length; i += 5) {
-    const batch = yearsToSearch.slice(i, i + 5);
-    for (const y of batch) {
-      const dateStr = `${y}-${month}-${day}`;
-      try {
-        const data = await tmdbFetch("/discover/movie", token, {
-          "primary_release_date.gte": dateStr,
-          "primary_release_date.lte": dateStr,
-          sort_by: "popularity.desc",
-          include_adult: false,
-          "vote_count.gte": 10,
-          page: 1,
-        });
-        for (const m of data.results || []) {
-          if (m.id && m.title) {
-            candidates.push(m);
-          }
+  for (const y of yearsToSearch) {
+    const center = new Date(`${y}-${mmdd}T00:00:00Z`);
+    const from = new Date(center.getTime() - 3 * 86400000).toISOString().slice(0, 10);
+    const to = new Date(center.getTime() + 3 * 86400000).toISOString().slice(0, 10);
+    try {
+      const data = await tmdbFetch("/discover/movie", token, {
+        "primary_release_date.gte": from,
+        "primary_release_date.lte": to,
+        sort_by: "popularity.desc",
+        include_adult: false,
+        page: 1,
+      });
+      for (const m of data.results || []) {
+        if (m.id && m.title && (m.popularity || 0) >= 5) {
+          candidates.push(m);
         }
-      } catch {
-        // skip failed year
       }
+    } catch {
+      // skip failed year
     }
-    if (candidates.length >= 20) break;
+    if (candidates.length >= 30) break;
   }
 
-  if (!candidates.length) {
-    return null;
-  }
+  if (!candidates.length) return null;
 
-  // Sort by tmdb_id for stability, then shuffle deterministically
-  candidates.sort((a, b) => a.id - b.id);
+  // Deduplicate by tmdb_id, sort for stability, then shuffle deterministically
+  const seen = new Set();
+  const unique = candidates.filter((m) => {
+    if (seen.has(m.id)) return false;
+    seen.add(m.id);
+    return true;
+  });
+  unique.sort((a, b) => a.id - b.id);
+
   const rng = mulberry32(dateToSeed(gameDate));
-
-  // Fisher-Yates shuffle with seeded RNG
-  for (let i = candidates.length - 1; i > 0; i--) {
+  for (let i = unique.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
-    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    [unique[i], unique[j]] = [unique[j], unique[i]];
   }
 
-  // Try candidates in shuffled order until we find one with revenue.
-  // Cap attempts to stay under Cloudflare subrequest limits.
+  // Try candidates until we find one with revenue data.
+  // Each attempt costs 2 subrequests (detail + credits).
   let picked = null;
   let detail = null;
   let credits = null;
-  for (const c of candidates.slice(0, 8)) {
+  for (const c of unique.slice(0, 10)) {
     try {
       const [d, cr] = await Promise.all([
         tmdbFetch(`/movie/${c.id}`, token),
