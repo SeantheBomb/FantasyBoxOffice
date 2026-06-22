@@ -14,9 +14,12 @@ database_id = "5cdc4ff3-adf8-4b63-a15a-9d9b8f125866"
 # Daily 09:00 UTC    → movies refresh
 # Daily 14:00 UTC    → dailies refresh
 # Every minute       → settle expired auctions
-# Monday 14:00 UTC   → post weekly standings to Discord (10 AM EDT / 9 AM EST).
+# Monday 14:30 UTC   → self-contained weekly standings (backfill + dailies
+#                       refresh + scoring + standings + announcement). Runs 30 min
+#                       after the 14:00 dailies cron — not because it depends on it
+#                       (the job refreshes data inline), but for fresher BOM figures.
 # Thursday 12:00 UTC → last-call reminder in #movie-chat (8 AM EDT).
 #   Use named days (MON, THU) — Cloudflare's numeric DOW is 1=Sunday,
 #   not POSIX-style 1=Monday, which silently fires a day early.
 [triggers]
-crons = ["0 9 * * *", "0 14 * * *", "* * * * *", "0 14 * * MON", "0 12 * * THU"]
+crons = ["0 9 * * *", "0 14 * * *", "* * * * *", "30 14 * * MON", "0 12 * * THU"]

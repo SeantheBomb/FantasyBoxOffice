@@ -1,9 +1,9 @@
 // Fantasy Box Office cron worker. Runs five scheduled jobs:
-//   0 9 * * *    — refresh TMDB movies (budget/poster/release)
-//   0 14 * * *   — scrape Box Office Mojo dailies for released movies
-//   * * * * *    — settle expired auctions
-//   0 14 * * MON — post the weekly standings recap to Discord (10 AM EDT)
-//   0 12 * * THU — last-call betting reminder in #movie-chat (8 AM EDT)
+//   0 9 * * *     — refresh TMDB movies (budget/poster/release/status)
+//   0 14 * * *    — scrape Box Office Mojo dailies for released movies
+//   * * * * *     — settle expired auctions
+//   30 14 * * MON — self-contained weekly standings post (backfill + score + post)
+//   0 12 * * THU  — last-call betting reminder in #movie-chat (8 AM EDT)
 //
 // Shares logic with the Pages Functions in ../../functions/api via relative imports.
 
@@ -27,7 +27,7 @@ export default {
       ctx.waitUntil(runDailiesRefresh(env));
     } else if (cron === "* * * * *") {
       ctx.waitUntil(runSettleExpired(env));
-    } else if (cron === "0 14 * * MON") {
+    } else if (cron === "30 14 * * MON") {
       ctx.waitUntil(runStandingsPost(env));
     } else if (cron === "0 12 * * THU") {
       ctx.waitUntil(runLastCallPost(env));
@@ -51,12 +51,10 @@ export default {
       ctx.waitUntil(runSettleExpired(env));
     } else if (job === "standings") {
       ctx.waitUntil(runStandingsPost(env));
-    } else if (job === "standings-quick") {
-      ctx.waitUntil(runStandingsPost(env, { skipBackfill: true }));
     } else if (job === "lastcall") {
       ctx.waitUntil(runLastCallPost(env));
     } else {
-      return new Response("job must be movies|dailies|settle|standings|standings-quick|lastcall", { status: 400 });
+      return new Response("job must be movies|dailies|settle|standings|lastcall", { status: 400 });
     }
     return new Response(JSON.stringify({ started: job }), {
       headers: { "Content-Type": "application/json" },

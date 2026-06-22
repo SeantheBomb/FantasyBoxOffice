@@ -12,37 +12,51 @@ Three pieces, all on Cloudflare:
 
 1. **React SPA** (`src/`) — Vite + React 19 + react-router. Built to `dist/`, deployed by Cloudflare Pages.
 2. **Pages Functions** (`functions/api/`) — file-based routing under `/api/*`. Each `.js` file exports `onRequestGet` / `onRequestPost` etc. Dynamic segments use `[id]` directory naming.
-3. **Cron Worker** (`worker/`) — separate Cloudflare Worker, deployed independently, name `fbo-cron`. Runs scheduled jobs and shares helpers with Pages Functions via relative imports into `../../functions/api/`.
+3. **Cron Worker** (`worker/`) — separate Cloudflare Worker, deployed independently, name `fantasy-box-office-weekly-report`. Runs scheduled jobs and shares helpers with Pages Functions via relative imports into `../../functions/api/`.
 
 Both runtimes bind the same D1 database as `env.DB`. Database name: `cf_auth_demo`, ID `5cdc4ff3-adf8-4b63-a15a-9d9b8f125866`.
 
 ## Cron jobs (`worker/wrangler.toml`)
 
 ```
-0 9 * * *    → refresh TMDB movies (budget/poster/release/status)
-0 14 * * *   → scrape Box Office Mojo dailies (today's snapshot)
-* * * * *    → settle expired auctions
-0 14 * * MON → post weekly standings recap to Discord
+0 9 * * *     → refresh TMDB movies (budget/poster/release/status)
+0 14 * * *    → scrape Box Office Mojo dailies (today's snapshot)
+* * * * *     → settle expired auctions
+30 14 * * MON → self-contained weekly standings post (backfill + score + post)
+0 12 * * THU  → last-call betting reminder in #movie-chat
 ```
 
 **CRITICAL — Cloudflare cron DOW numbering:** Cloudflare uses Quartz-style `1=Sunday`, NOT POSIX `1=Monday`. Always use named days (`MON`, `TUE`...) for day-of-week, otherwise the post fires a day early. See commit `0ba7ac7`.
 
-## The Discord post (the most-touched feature)
+## The Monday standings post (the most-touched feature)
 
-`worker/src/standings-job.js` orchestrates the Monday post:
+`worker/src/standings-job.js` orchestrates the Monday post as a **self-contained job** — it produces all the data it needs before consuming it, eliminating timing dependencies on other crons:
 
-1. Calls `backfillDailies` (NOT `refreshDailies`) — pulls full weekly cumulative history from BOM release pages so the chart isn't missing data when the daily cron has skipped runs. See commit `4c4f2bd`.
-2. Calls `computeStandings` and `computeHistory` (extracted from the Pages endpoints into `functions/api/game/_standings.js` / `_history.js` so both runtimes can call them).
-3. Renders chart via QuickChart.io. **Gotcha:** `buildChartConfig()` in `functions/api/_discord.js` returns a **JS template literal STRING**, not a parsed JSON object. QuickChart only evals callback functions when the chart param is a string. If you switch back to an object, axis tick callbacks silently disappear.
-4. Posts to Discord webhook (`DISCORD_WEBHOOK_URL` secret) as a multipart POST with the PNG attached.
+1. **Backfill** — `backfillDailies()` pulls full weekly cumulative history from BOM release pages. Always runs; never skipped.
+2. **Daily refresh** — `refreshDailies()` gets today's cumulative BOM snapshot inline, eliminating the race with the 14:00 daily cron.
+3. **Score predictions** — `autoScoreWeekendPicks()` finds unscored movies from the past 3 days, gets their BOM opening weekend gross, and calls `scoreMovie()`. Points are written to DB first; Discord post is a separate step so a webhook failure doesn't mask a successful score.
+4. **Refresh budgets** — `refreshNewReleaseBudgets()` updates TMDB budgets for movies that opened in the past week.
+5. **Standings + chart** — `computeStandings()` and `computeHistory()` run in parallel, then `buildChartConfig()` renders via QuickChart.io. **Gotcha:** `buildChartConfig()` returns a **JS template literal STRING**, not a parsed JSON object. QuickChart only evals callback functions when the chart param is a string.
+6. **Post to Discord** — multipart POST with the PNG attached + overflow text messages.
+7. **Weekend announcement** — if `weekend_movies` has rows for `weekend_date >= today`, posts the upcoming lineup with poster embeds.
 
-Manual trigger: `curl https://fbo-cron.<subdomain>.workers.dev/trigger?job=standings`. The worker's `fetch` handler also accepts `movies | dailies | settle | standings`.
+Every step is logged with `[standings]` prefix and timing. The final log line is a single JSON summary: `[standings] DONE {...}`.
+
+Manual trigger: `curl https://fantasy-box-office-weekly-report.sean-feeser.workers.dev/trigger?job=standings`.
 
 Admin UI button: "Post to Discord" → `POST /api/admin/discord/test-post`.
 
+## Local test for the standings job
+
+```bash
+node --loader ./worker/test/loader.mjs ./worker/test/run-standings-local.mjs
+```
+
+Seeds an in-memory SQLite DB (via `better-sqlite3`), stubs `fetch` to capture Discord/BOM/TMDB/QuickChart calls, runs the full `runStandingsPost()` flow, and validates: scoring correctness (points 3/2/1), standings posted, chart rendered, announcement posted. Run this before deploying changes to the standings job.
+
 ## Schema
 
-5 migrations in `migrations/`. `functions/api/_schema.js` has a `bootstrapSchema()` self-healing helper for the `in_league` column — it runs an idempotent `ALTER TABLE` swallowing "duplicate column" errors. Called from auth-gated endpoints before queries that depend on it.
+9 migrations in `migrations/`. `functions/api/_schema.js` has a `bootstrapSchema()` self-healing helper for columns added after initial migration — it runs idempotent `ALTER TABLE` statements, swallowing "duplicate column" errors. Called from auth-gated endpoints before queries that depend on those columns.
 
 Key tables:
 - `users` — id, email, username, password_hash/salt, points_remaining, is_admin, in_league
@@ -51,6 +65,9 @@ Key tables:
 - `auctions` — id, tmdb_id, status (`open` | `sold` | `cancelled`), current_bid, current_bidder_id, ends_at, settled_at
 - `auction_passes` — auction_id, user_id (composite key)
 - `dailies` — tmdb_id, date, domestic_revenue, source (`bom` | `bom-weekly` | `manual`), scraped_at
+- `weekend_movies` — tmdb_id, weekend_date (composite PK). Admin must populate before Monday for the announcement.
+- `weekend_picks` — discord_user_id, tmdb_id, estimate (integer millions), weekend_date, points_awarded
+- `weekend_results` — tmdb_id, weekend_date, actual_gross, scored_at
 
 ## Points system
 
@@ -72,7 +89,7 @@ There is no separate "prediction points" balance. Winning predictions directly f
 
 `functions/api/_boxoffice.js` has two scrapers:
 - `refreshDailies` — one row per (movie, today). Cheap, run daily by cron. Skips movies already scraped today, only touches owned + actively-auctioned movies.
-- `backfillDailies` — scrapes BOM's `/release/rl…/` weekly chart, gets all weekly cumulative totals. Used by the Monday Discord post for completeness. Manual entries (source=`manual`) are preserved on conflict.
+- `backfillDailies` — scrapes BOM's `/release/rl…/` weekly chart, gets all weekly cumulative totals. Used by the Monday standings job for completeness. Manual entries (source=`manual`) are preserved on conflict.
 
 BOM has no API; we parse HTML via regex. Slug discovery: TMDB → IMDB ID → BOM `/title/tt…/`.
 
@@ -102,7 +119,7 @@ npx wrangler dev
 curl 'http://localhost:8787/trigger?job=standings'
 ```
 
-Lint: `npm run lint`. No test suite — verify in browser and via Discord post.
+Lint: `npm run lint`. Standings test: see "Local test" section above.
 
 ## Deploy
 
@@ -141,3 +158,4 @@ Pages Functions uses Pages env vars (set in CF dashboard or via `wrangler pages 
 - `_schema.js`'s `bootstrapped` flag is per-isolate. New isolates re-run the ALTER; the duplicate-column error is swallowed. If you add another self-healing migration, follow the same pattern.
 - The QuickChart string-vs-object trap noted under "Discord post" above. Only chart configs sent as JS strings get callback eval.
 - BOM is fragile. `refreshDailies`/`backfillDailies` failures don't throw — they collect into `failures[]` so a single bad slug doesn't kill the run. Tail the worker if dailies look stale.
+- The shared helpers use extensionless imports (e.g. `from "./_tmdb"`) which Cloudflare resolves automatically but Node ESM does not. The local test harness uses a custom loader (`worker/test/loader.mjs`) to bridge this.
