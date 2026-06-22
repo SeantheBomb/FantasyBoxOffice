@@ -33,7 +33,8 @@ export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
   const mmdd = gameDate.slice(5); // "MM-DD"
 
   // Build candidate pool: spread across decades so any era can appear.
-  // Each call covers a 7-day window (±3 days) to maximize hits.
+  // Each call covers a 7-day window (±3 days). Take up to 4 from each
+  // year so no single era dominates the pool.
   const candidates = [];
   const yearsToSearch = [
     currentYear - 1, currentYear - 3, currentYear - 5,
@@ -51,19 +52,20 @@ export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
         with_release_type: "2|3",
         "primary_release_date.gte": from,
         "primary_release_date.lte": to,
-        sort_by: "popularity.desc",
+        sort_by: "revenue.desc",
         include_adult: false,
         page: 1,
       });
+      let added = 0;
       for (const m of data.results || []) {
-        if (m.id && m.title && (m.popularity || 0) >= 5) {
+        if (m.id && m.title && added < 4) {
           candidates.push(m);
+          added++;
         }
       }
     } catch {
       // skip failed year
     }
-    if (candidates.length >= 30) break;
   }
 
   if (!candidates.length) return null;
