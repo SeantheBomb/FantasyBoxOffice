@@ -32,13 +32,14 @@ export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
   const currentYear = parseInt(gameDate.slice(0, 4), 10);
   const mmdd = gameDate.slice(5); // "MM-DD"
 
-  // Build candidate pool: check ~6 years spread across the range.
+  // Build candidate pool: spread across decades so any era can appear.
   // Each call covers a 7-day window (±3 days) to maximize hits.
   const candidates = [];
   const yearsToSearch = [
     currentYear - 1, currentYear - 3, currentYear - 5,
     currentYear - 8, currentYear - 12, currentYear - 18,
-  ].filter((y) => y >= 1995);
+    currentYear - 25, currentYear - 35, currentYear - 45,
+  ].filter((y) => y >= 1970);
 
   for (const y of yearsToSearch) {
     const center = new Date(`${y}-${mmdd}T00:00:00Z`);
