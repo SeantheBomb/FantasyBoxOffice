@@ -137,7 +137,30 @@ export async function getOrCreateDailyMovie(db, token, gameDate) {
   return row;
 }
 
-// Compare a guessed movie against the answer — returns hint flags
+// Compare guessed title against answer for Hangman-style letter reveals.
+// Returns positions where the guess has the correct letter, and letters
+// that don't appear anywhere in the answer.
+function compareLetters(answerTitle, guessTitle) {
+  const aLower = answerTitle.toLowerCase();
+  const gLower = guessTitle.toLowerCase();
+
+  // Positional matches (case-insensitive)
+  const revealed = [];
+  for (let i = 0; i < Math.min(aLower.length, gLower.length); i++) {
+    if (aLower[i] === gLower[i]) {
+      revealed.push({ index: i, char: answerTitle[i] });
+    }
+  }
+
+  // Letters in the guess that don't appear anywhere in the answer (letters only)
+  const answerLetters = new Set(aLower.replace(/[^a-z]/g, "").split(""));
+  const guessLetters = new Set(gLower.replace(/[^a-z]/g, "").split(""));
+  const eliminated = [...guessLetters].filter((l) => !answerLetters.has(l));
+
+  return { revealed, eliminated };
+}
+
+// Compare a guessed movie against the answer — returns detailed hints
 export async function compareMovies(answer, guessedTmdbId, token) {
   const [detail, credits] = await Promise.all([
     tmdbFetch(`/movie/${guessedTmdbId}`, token),
@@ -152,19 +175,24 @@ export async function compareMovies(answer, guessedTmdbId, token) {
   const guessCompanies = (detail.production_companies || []).map((c) => c.name);
   const guessCast = (credits.cast || []).slice(0, 10).map((c) => c.name);
 
-  const genreMatch = answerGenres.some((g) => guessGenres.includes(g));
-  const companyMatch = answerCompanies.some((c) => guessCompanies.includes(c));
-  const castMatch = answerCast.some((c) => guessCast.includes(c));
+  const matchingGenres = answerGenres.filter((g) => guessGenres.includes(g));
+  const matchingCompanies = answerCompanies.filter((c) => guessCompanies.includes(c));
+  const matchingCast = answerCast.filter((c) => guessCast.includes(c));
+
+  const letters = compareLetters(answer.title, detail.title);
 
   return {
     title: detail.title,
     poster_url: posterUrl(detail.poster_path),
     release_year: detail.release_date?.slice(0, 4) || null,
-    genre_match: genreMatch,
-    company_match: companyMatch,
-    cast_match: castMatch,
-    guessed_genres: guessGenres,
-    guessed_companies: guessCompanies,
+    genre_match: matchingGenres.length > 0,
+    company_match: matchingCompanies.length > 0,
+    cast_match: matchingCast.length > 0,
+    matching_genres: matchingGenres,
+    matching_companies: matchingCompanies,
+    matching_cast: matchingCast,
+    revealed_positions: letters.revealed,
+    eliminated_letters: letters.eliminated,
   };
 }
 

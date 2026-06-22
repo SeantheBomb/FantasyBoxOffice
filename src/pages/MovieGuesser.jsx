@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { apiGuesserToday, apiGuesserGuess, apiGuesserSearch, apiGuesserComplete } from "../api";
 
 const STORAGE_KEY = "fbo_guesser_";
@@ -49,7 +49,77 @@ function Countdown() {
   return <span>{left}</span>;
 }
 
-function HintBadge({ label, match }) {
+// Hangman-style title display
+function TitleReveal({ titleLength, revealedPositions, eliminatedLetters, won, answerTitle }) {
+  if (won && answerTitle) {
+    return (
+      <div style={{ textAlign: "center", marginBottom: 16 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 3 }}>
+          {answerTitle.split("").map((ch, i) => (
+            <span key={i} style={{
+              width: 22, height: 28, display: "inline-flex", alignItems: "center", justifyContent: "center",
+              fontSize: 14, fontWeight: 700, color: "var(--fbo-success)",
+              background: "rgba(99, 211, 122, 0.15)", borderRadius: 3,
+              border: "1px solid rgba(99, 211, 122, 0.3)",
+            }}>{ch}</span>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Build the revealed map from accumulated positions
+  const revealed = {};
+  for (const { index, char } of revealedPositions) {
+    revealed[index] = char;
+  }
+
+  return (
+    <div style={{
+      background: "var(--fbo-bg-card)", borderRadius: 8, padding: 16,
+      border: "1px solid var(--fbo-border)", marginBottom: 16,
+    }}>
+      <div style={{ fontSize: 11, color: "var(--fbo-text-muted)", marginBottom: 8, textAlign: "center" }}>
+        Title ({titleLength} characters)
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 3, marginBottom: 12 }}>
+        {Array.from({ length: titleLength }, (_, i) => {
+          const ch = revealed[i];
+          return (
+            <span key={i} style={{
+              width: 22, height: 28, display: "inline-flex", alignItems: "center", justifyContent: "center",
+              fontSize: 14, fontWeight: ch ? 700 : 400,
+              color: ch ? "var(--fbo-gold)" : "var(--fbo-text-muted)",
+              background: ch ? "rgba(245, 210, 122, 0.12)" : "var(--fbo-bg-panel)",
+              borderRadius: 3,
+              border: `1px solid ${ch ? "rgba(245, 210, 122, 0.3)" : "var(--fbo-border)"}`,
+            }}>
+              {ch || "·"}
+            </span>
+          );
+        })}
+      </div>
+      {eliminatedLetters.length > 0 && (
+        <div style={{ textAlign: "center" }}>
+          <span style={{ fontSize: 11, color: "var(--fbo-text-muted)", marginRight: 6 }}>Not in title:</span>
+          {eliminatedLetters.sort().map((l) => (
+            <span key={l} style={{
+              display: "inline-block", width: 20, height: 20, lineHeight: "20px",
+              textAlign: "center", fontSize: 11, fontWeight: 600,
+              color: "#ff6b6b", background: "rgba(255, 107, 107, 0.1)",
+              borderRadius: 3, margin: "0 2px",
+            }}>{l.toUpperCase()}</span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HintBadge({ label, match, details }) {
+  const displayLabel = match && details?.length
+    ? `${label}: ${details.join(", ")}`
+    : label;
   return (
     <span style={{
       display: "inline-block",
@@ -61,7 +131,7 @@ function HintBadge({ label, match }) {
       color: match ? "#63d37a" : "#ff6b6b",
       border: `1px solid ${match ? "rgba(99, 211, 122, 0.3)" : "rgba(255, 107, 107, 0.3)"}`,
     }}>
-      {match ? "✓" : "✗"} {label}
+      {match ? "✓" : "✗"} {displayLabel}
     </span>
   );
 }
@@ -105,6 +175,19 @@ function StatsPanel({ stats }) {
   );
 }
 
+// Format search results: only show year when there are duplicate titles
+function formatSearchResults(results) {
+  const titleCounts = {};
+  for (const r of results) {
+    titleCounts[r.title] = (titleCounts[r.title] || 0) + 1;
+  }
+  return results.map((r) => ({
+    ...r,
+    display: titleCounts[r.title] > 1 ? `${r.title} (${r.release_year || "?"})` : r.title,
+    showYear: titleCounts[r.title] > 1,
+  }));
+}
+
 export default function MovieGuesser() {
   const [puzzle, setPuzzle] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -127,6 +210,25 @@ export default function MovieGuesser() {
   const dropdownRef = useRef(null);
   const inputRef = useRef(null);
 
+  // Accumulate letter hints across all guesses
+  const { revealedPositions, eliminatedLetters } = useMemo(() => {
+    const posMap = {};
+    const elimSet = new Set();
+    for (const g of guesses) {
+      if (g.correct) continue;
+      for (const { index, char } of g.revealed_positions || []) {
+        posMap[index] = char;
+      }
+      for (const l of g.eliminated_letters || []) {
+        elimSet.add(l);
+      }
+    }
+    return {
+      revealedPositions: Object.entries(posMap).map(([i, c]) => ({ index: Number(i), char: c })),
+      eliminatedLetters: [...elimSet],
+    };
+  }, [guesses]);
+
   useEffect(() => {
     (async () => {
       const res = await apiGuesserToday();
@@ -138,7 +240,6 @@ export default function MovieGuesser() {
       setPuzzle(res.data);
       setStats(res.data.stats);
 
-      // Restore game state from localStorage
       const saved = getStoredGame(res.data.game_date);
       if (saved) {
         setGuesses(saved.guesses || []);
@@ -150,7 +251,6 @@ export default function MovieGuesser() {
     })();
   }, []);
 
-  // Close dropdown on outside click
   useEffect(() => {
     function handleClick(e) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -169,6 +269,8 @@ export default function MovieGuesser() {
     setSearching(false);
   }, []);
 
+  const formattedResults = useMemo(() => formatSearchResults(searchResults), [searchResults]);
+
   function handleInputChange(e) {
     const val = e.target.value;
     setQuery(val);
@@ -179,20 +281,20 @@ export default function MovieGuesser() {
   }
 
   function handleKeyDown(e) {
-    if (!showDropdown || !searchResults.length) {
+    if (!showDropdown || !formattedResults.length) {
       if (e.key === "Enter") e.preventDefault();
       return;
     }
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setSelectedIdx((prev) => Math.min(prev + 1, searchResults.length - 1));
+      setSelectedIdx((prev) => Math.min(prev + 1, formattedResults.length - 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setSelectedIdx((prev) => Math.max(prev - 1, 0));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (selectedIdx >= 0 && selectedIdx < searchResults.length) {
-        submitGuess(searchResults[selectedIdx]);
+      if (selectedIdx >= 0 && selectedIdx < formattedResults.length) {
+        submitGuess(formattedResults[selectedIdx]);
       }
     } else if (e.key === "Escape") {
       setShowDropdown(false);
@@ -201,7 +303,6 @@ export default function MovieGuesser() {
 
   async function submitGuess(movie) {
     if (won || submitting) return;
-    // Don't allow duplicate guesses
     if (guesses.some((g) => g.tmdb_id === movie.tmdb_id)) {
       setQuery("");
       setShowDropdown(false);
@@ -227,6 +328,11 @@ export default function MovieGuesser() {
       genre_match: res.data.genre_match,
       company_match: res.data.company_match,
       cast_match: res.data.cast_match,
+      matching_genres: res.data.matching_genres || [],
+      matching_companies: res.data.matching_companies || [],
+      matching_cast: res.data.matching_cast || [],
+      revealed_positions: res.data.revealed_positions || [],
+      eliminated_letters: res.data.eliminated_letters || [],
     };
 
     const newGuesses = [...guesses, guess];
@@ -242,7 +348,6 @@ export default function MovieGuesser() {
         genres: res.data.genres,
       });
 
-      // Report completion (only once)
       if (!reportedRef.current) {
         const completeRes = await apiGuesserComplete(newGuesses.length);
         if (completeRes.ok) setStats(completeRes.data.stats);
@@ -271,7 +376,7 @@ export default function MovieGuesser() {
     const text = `🎬 FBO Movie Guesser ${puzzle.game_date}\n${guessCount} guess${guessCount !== 1 ? "es" : ""}\n\n${hintsLine}\n\nfantasyboxoffice.pages.dev/guesser`;
     try {
       await navigator.clipboard.writeText(text);
-    } catch { /* fallback: do nothing */ }
+    } catch { /* fallback */ }
   }
 
   if (loading) {
@@ -302,7 +407,7 @@ export default function MovieGuesser() {
       {/* Clue card */}
       <div style={{
         background: "var(--fbo-bg-card)", borderRadius: 8, padding: 20,
-        border: "1px solid var(--fbo-border)", marginBottom: 20, textAlign: "center",
+        border: "1px solid var(--fbo-border)", marginBottom: 16, textAlign: "center",
       }}>
         <div style={{ fontSize: 13, color: "var(--fbo-text-muted)", marginBottom: 4 }}>Released</div>
         <div style={{ fontSize: 22, fontWeight: 700, color: "var(--fbo-text)", marginBottom: 12 }}>
@@ -313,6 +418,17 @@ export default function MovieGuesser() {
           {fmtRevenue(puzzle.revenue)}
         </div>
       </div>
+
+      {/* Hangman-style title reveal */}
+      {puzzle.title_length && (
+        <TitleReveal
+          titleLength={puzzle.title_length}
+          revealedPositions={revealedPositions}
+          eliminatedLetters={eliminatedLetters}
+          won={won}
+          answerTitle={answer?.title}
+        />
+      )}
 
       {/* Win state */}
       {won && answer && (
@@ -358,7 +474,7 @@ export default function MovieGuesser() {
             value={query}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            onFocus={() => searchResults.length && setShowDropdown(true)}
+            onFocus={() => formattedResults.length && setShowDropdown(true)}
             placeholder="Type a movie name..."
             disabled={submitting}
             style={{
@@ -367,14 +483,14 @@ export default function MovieGuesser() {
               color: "var(--fbo-text)", fontSize: 15, outline: "none",
             }}
           />
-          {showDropdown && searchResults.length > 0 && (
+          {showDropdown && formattedResults.length > 0 && (
             <div style={{
               position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10,
               background: "var(--fbo-bg-panel)", border: "1px solid var(--fbo-border)",
               borderRadius: "0 0 6px 6px", maxHeight: 280, overflowY: "auto",
               boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
             }}>
-              {searchResults.map((m, i) => (
+              {formattedResults.map((m, i) => (
                 <div key={m.tmdb_id}
                   onClick={() => submitGuess(m)}
                   onMouseEnter={() => setSelectedIdx(i)}
@@ -386,12 +502,7 @@ export default function MovieGuesser() {
                   {m.poster_url && (
                     <img src={m.poster_url} alt="" style={{ width: 28, height: 42, borderRadius: 3, objectFit: "cover" }} />
                   )}
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 500 }}>{m.title}</div>
-                    {m.release_year && (
-                      <div style={{ fontSize: 12, color: "var(--fbo-text-muted)" }}>{m.release_year}</div>
-                    )}
-                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 500 }}>{m.display}</div>
                 </div>
               ))}
             </div>
@@ -428,19 +539,12 @@ export default function MovieGuesser() {
                   {i + 1}
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 500 }}>
-                    {g.title}
-                    {g.release_year && (
-                      <span style={{ color: "var(--fbo-text-muted)", fontWeight: 400, marginLeft: 6, fontSize: 12 }}>
-                        ({g.release_year})
-                      </span>
-                    )}
-                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 500 }}>{g.title}</div>
                   {!g.correct && (
                     <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
-                      <HintBadge label="Genre" match={g.genre_match} />
-                      <HintBadge label="Studio" match={g.company_match} />
-                      <HintBadge label="Actor" match={g.cast_match} />
+                      <HintBadge label="Genre" match={g.genre_match} details={g.matching_genres} />
+                      <HintBadge label="Studio" match={g.company_match} details={g.matching_companies} />
+                      <HintBadge label="Actor" match={g.cast_match} details={g.matching_cast} />
                     </div>
                   )}
                 </div>
@@ -450,7 +554,7 @@ export default function MovieGuesser() {
         </div>
       )}
 
-      {/* How to play (show when no guesses yet and not won) */}
+      {/* How to play */}
       {!won && guesses.length === 0 && (
         <div style={{
           background: "var(--fbo-bg-card)", borderRadius: 8, padding: 16,
@@ -458,15 +562,14 @@ export default function MovieGuesser() {
         }}>
           <h3 style={{ margin: "0 0 8px", fontSize: 14, color: "var(--fbo-text)" }}>How to Play</h3>
           <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 1.8 }}>
-            <li>A movie was released on the date shown above — guess which one!</li>
-            <li>After each wrong guess, you'll see if you matched the <b>genre</b>, <b>studio</b>, or <b>actors</b></li>
-            <li>Use the clues to narrow it down. Fewer guesses = better score</li>
-            <li>New puzzle every day at midnight</li>
+            <li>A movie was released near the date shown above — guess which one!</li>
+            <li>After each wrong guess, you'll see which <b>genres</b>, <b>studios</b>, or <b>actors</b> match</li>
+            <li>Letters in the right position get revealed, and eliminated letters are shown</li>
+            <li>Fewer guesses = better score. New puzzle every day at midnight</li>
           </ul>
         </div>
       )}
 
-      {/* Stats panel — show after winning or if others have played */}
       <StatsPanel stats={stats} />
     </div>
   );
