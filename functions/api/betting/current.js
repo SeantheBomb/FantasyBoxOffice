@@ -22,11 +22,18 @@ export async function onRequestGet({ request, env }) {
 
   const today = new Date().toISOString().slice(0, 10);
 
-  // Active = the earliest weekend that's within the last 7 days or in the future
-  const weekend = await env.DB.prepare(
+  // Prefer the earliest future weekend; fall back to the most recent past weekend within 7 days
+  let weekend = await env.DB.prepare(
     `SELECT MIN(weekend_date) as weekend_date FROM weekend_movies
-     WHERE weekend_date >= date('now', '-7 days')`
-  ).first();
+     WHERE weekend_date >= ?`
+  ).bind(today).first();
+
+  if (!weekend?.weekend_date) {
+    weekend = await env.DB.prepare(
+      `SELECT MAX(weekend_date) as weekend_date FROM weekend_movies
+       WHERE weekend_date >= date('now', '-7 days') AND weekend_date < ?`
+    ).bind(today).first();
+  }
 
   if (!weekend?.weekend_date) return json({ weekend: null });
 

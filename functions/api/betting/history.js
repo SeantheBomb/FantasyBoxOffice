@@ -3,11 +3,23 @@ import { json } from "../_auth.js";
 export async function onRequestGet({ env }) {
   const today = new Date().toISOString().slice(0, 10);
 
-  // All past weekends, newest first
+  // Figure out which weekend the current endpoint is showing so we can exclude it
+  let currentDate = (await env.DB.prepare(
+    `SELECT MIN(weekend_date) as weekend_date FROM weekend_movies WHERE weekend_date >= ?`
+  ).bind(today).first())?.weekend_date;
+  if (!currentDate) {
+    currentDate = (await env.DB.prepare(
+      `SELECT MAX(weekend_date) as weekend_date FROM weekend_movies
+       WHERE weekend_date >= date('now', '-7 days') AND weekend_date < ?`
+    ).bind(today).first())?.weekend_date;
+  }
+
+  // All past weekends excluding the current one, newest first
   const weekendsRows = await env.DB.prepare(
     `SELECT DISTINCT weekend_date FROM weekend_movies
-     WHERE weekend_date < ? ORDER BY weekend_date DESC`
-  ).bind(today).all();
+     WHERE weekend_date < ? AND weekend_date != COALESCE(?, '')
+     ORDER BY weekend_date DESC`
+  ).bind(today, currentDate).all();
 
   const weekendDates = (weekendsRows.results ?? []).map((r) => r.weekend_date);
   if (!weekendDates.length) return json({ weekends: [] });
