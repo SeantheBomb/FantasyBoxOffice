@@ -34,11 +34,13 @@ export async function getOrCreateDailyMovie(db, token, gameDate) {
   // Search across several prior years for movies released on this month/day
   const candidates = [];
   const yearsToSearch = [];
-  for (let y = currentYear - 1; y >= currentYear - 30 && y >= 1980; y--) {
+  for (let y = currentYear - 1; y >= currentYear - 20 && y >= 1995; y--) {
     yearsToSearch.push(y);
   }
 
-  // Batch discover calls — search 5 year ranges to stay under subrequest limits
+  // Search each prior year for movies released on this month/day.
+  // TMDB discover doesn't return revenue in list results, so we collect
+  // candidates here and filter by revenue after fetching detail.
   for (let i = 0; i < yearsToSearch.length; i += 5) {
     const batch = yearsToSearch.slice(i, i + 5);
     for (const y of batch) {
@@ -47,13 +49,13 @@ export async function getOrCreateDailyMovie(db, token, gameDate) {
         const data = await tmdbFetch("/discover/movie", token, {
           "primary_release_date.gte": dateStr,
           "primary_release_date.lte": dateStr,
-          sort_by: "revenue.desc",
+          sort_by: "popularity.desc",
           include_adult: false,
-          "vote_count.gte": 50,
+          "vote_count.gte": 10,
           page: 1,
         });
         for (const m of data.results || []) {
-          if (m.id && m.title && (m.revenue || 0) > 0) {
+          if (m.id && m.title) {
             candidates.push(m);
           }
         }
@@ -68,17 +70,39 @@ export async function getOrCreateDailyMovie(db, token, gameDate) {
     return null;
   }
 
-  // Sort by tmdb_id for stability, then pick deterministically
+  // Sort by tmdb_id for stability, then shuffle deterministically
   candidates.sort((a, b) => a.id - b.id);
   const rng = mulberry32(dateToSeed(gameDate));
-  const idx = Math.floor(rng() * candidates.length);
-  const picked = candidates[idx];
 
-  // Fetch full details: genres, production companies, credits
-  const [detail, credits] = await Promise.all([
-    tmdbFetch(`/movie/${picked.id}`, token),
-    tmdbFetch(`/movie/${picked.id}/credits`, token),
-  ]);
+  // Fisher-Yates shuffle with seeded RNG
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+
+  // Try candidates in shuffled order until we find one with revenue.
+  // Cap attempts to stay under Cloudflare subrequest limits.
+  let picked = null;
+  let detail = null;
+  let credits = null;
+  for (const c of candidates.slice(0, 8)) {
+    try {
+      const [d, cr] = await Promise.all([
+        tmdbFetch(`/movie/${c.id}`, token),
+        tmdbFetch(`/movie/${c.id}/credits`, token),
+      ]);
+      if (d.revenue && d.revenue > 0) {
+        picked = c;
+        detail = d;
+        credits = cr;
+        break;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  if (!picked || !detail) return null;
 
   const genres = (detail.genres || []).map((g) => g.name);
   const companies = (detail.production_companies || []).map((c) => c.name);
