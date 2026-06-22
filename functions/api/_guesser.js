@@ -46,6 +46,8 @@ export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
     const to = new Date(center.getTime() + 3 * 86400000).toISOString().slice(0, 10);
     try {
       const data = await tmdbFetch("/discover/movie", token, {
+        region: "US",
+        with_release_type: "2|3",
         "primary_release_date.gte": from,
         "primary_release_date.lte": to,
         sort_by: "popularity.desc",
