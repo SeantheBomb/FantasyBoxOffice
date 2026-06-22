@@ -409,9 +409,10 @@
   border: 1px solid rgba(99, 211, 122, 0.3);
 }
 .mg-badge--miss {
-  background: rgba(255, 107, 107, 0.1);
-  color: #ff6b6b;
-  border: 1px solid rgba(255, 107, 107, 0.2);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--fbo-text-muted);
+  border: 1px solid var(--fbo-border);
+  opacity: 0.6;
 }
 
 /* ── How to play ── */
