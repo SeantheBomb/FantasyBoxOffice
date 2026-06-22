@@ -245,14 +245,31 @@
 .mg-search-wrap {
   position: relative;
   margin-bottom: 24px;
+  background: var(--fbo-bg-panel);
+  border: 2px solid var(--fbo-gold-soft);
+  box-shadow:
+    0 0 0 1px rgba(245, 210, 122, 0.08),
+    0 4px 16px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(245, 210, 122, 0.06);
+  padding: 3px;
 }
+/* Corner ornaments */
+.mg-search-wrap::before,
+.mg-search-wrap::after {
+  content: "◆";
+  position: absolute;
+  font-size: 8px;
+  color: var(--fbo-gold-soft);
+  line-height: 1;
+}
+.mg-search-wrap::before { top: -6px; left: -6px; }
+.mg-search-wrap::after { top: -6px; right: -6px; }
 .mg-search-input {
   width: 100%;
-  padding: 11px 16px;
+  padding: 14px 18px;
   border-radius: 0;
-  border: 1px solid var(--fbo-border);
-  border-bottom: 2px solid var(--fbo-gold-soft);
-  background: var(--fbo-bg-panel);
+  border: none;
+  background: transparent;
   color: var(--fbo-text);
   font-size: 16px;
   font-family: inherit;
@@ -262,8 +279,14 @@
 }
 .mg-search-input:focus {
   outline: none;
-  border-bottom-color: var(--fbo-gold-soft);
   box-shadow: none;
+}
+.mg-search-wrap:focus-within {
+  border-color: var(--fbo-gold);
+  box-shadow:
+    0 0 0 1px rgba(245, 210, 122, 0.15),
+    0 4px 20px rgba(245, 210, 122, 0.08),
+    inset 0 1px 0 rgba(245, 210, 122, 0.1);
 }
 .mg-search-input::placeholder {
   color: var(--fbo-text-muted);

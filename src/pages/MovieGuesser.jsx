@@ -538,7 +538,7 @@ export default function MovieGuesser() {
         </div>
       )}
 
-      <StatsPanel stats={stats} />
+      {won && <StatsPanel stats={stats} />}
 
       {user?.is_admin && puzzle && (
         <div className="mg-admin-bar">
