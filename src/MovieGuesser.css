@@ -266,8 +266,8 @@
   box-shadow: none;
 }
 .mg-search-input::placeholder {
-  color: #5a4d64;
-  font-style: italic;
+  color: var(--fbo-text-muted);
+  font-style: normal;
 }
 
 .mg-dropdown {

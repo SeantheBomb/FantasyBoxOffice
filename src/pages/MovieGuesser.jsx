@@ -479,7 +479,7 @@ export default function MovieGuesser() {
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             onFocus={() => formattedResults.length && setShowDropdown(true)}
-            placeholder="Search for a movie..."
+            placeholder="Search for a movie to submit a guess"
             disabled={submitting}
             className="mg-search-input"
           />
