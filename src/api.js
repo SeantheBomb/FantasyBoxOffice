@@ -133,6 +133,14 @@ export const apiAdminDeletePick = (id) =>
 export const apiAdminCreatePick = (pick) =>
   jsonFetch("/api/admin/weekend/picks", { method: "POST", body: pick });
 
+// Movie Guesser (public, no auth)
+export const apiGuesserToday = () => jsonFetch("/api/guesser/today");
+export const apiGuesserGuess = (tmdbId) =>
+  jsonFetch("/api/guesser/guess", { method: "POST", body: { tmdb_id: tmdbId } });
+export const apiGuesserSearch = (q) => jsonFetch(`/api/guesser/search?q=${encodeURIComponent(q)}`);
+export const apiGuesserComplete = (numGuesses) =>
+  jsonFetch("/api/guesser/complete", { method: "POST", body: { num_guesses: numGuesses } });
+
 // Betting / weekend predictions (public)
 export const apiBettingCurrent = () => jsonFetch("/api/betting/current");
 export const apiBettingHistory = () => jsonFetch("/api/betting/history");

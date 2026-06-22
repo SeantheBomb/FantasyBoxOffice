@@ -29,6 +29,7 @@ export default function Layout({ children }) {
         <nav className="fbo-nav">
           <NavLink to="/standings" style={linkStyle}>Standings</NavLink>
           <NavLink to="/betting" style={linkStyle}>Predictions</NavLink>
+          <NavLink to="/guesser" style={linkStyle}>Movie Guesser</NavLink>
           {user && (
             <>
               <NavLink to="/catalog" style={linkStyle}>Catalog</NavLink>

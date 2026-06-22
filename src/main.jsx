@@ -15,6 +15,7 @@ import MyMovies from "./pages/MyMovies.jsx";
 import MovieDetail from "./pages/MovieDetail.jsx";
 import Admin from "./pages/Admin.jsx";
 import Betting from "./pages/Betting.jsx";
+import MovieGuesser from "./pages/MovieGuesser.jsx";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
@@ -33,6 +34,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             <Route path="/my-movies" element={<MyMovies />} />
             <Route path="/movie/:tmdbId" element={<MovieDetail />} />
             <Route path="/betting" element={<Betting />} />
+            <Route path="/guesser" element={<MovieGuesser />} />
             <Route path="/admin" element={<Admin />} />
             <Route path="*" element={<div>Not found</div>} />
           </Routes>
