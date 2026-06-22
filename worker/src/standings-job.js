@@ -15,7 +15,10 @@ import {
 } from "../../functions/api/_discord.js";
 import { scoreMovie } from "../../functions/api/_weekend-scoring.js";
 
-export async function runStandingsPost(env) {
+// { quick: true } skips the slow BOM scraping steps (backfill + dailies
+// refresh). Use for manual HTTP triggers where ctx.waitUntil has a 30-second
+// wall clock limit. The Monday cron always runs the full flow.
+export async function runStandingsPost(env, { quick = false } = {}) {
   const t0 = Date.now();
 
   if (!env.DISCORD_WEBHOOK_URL) {
@@ -23,14 +26,16 @@ export async function runStandingsPost(env) {
     return { error: "DISCORD_WEBHOOK_URL missing" };
   }
 
-  console.log("[standings] starting");
+  console.log(`[standings] starting (quick=${quick})`);
 
   // ── Step 1: Backfill BOM weekly history ──────────────────────────────
   // Fetches the weekly release chart for every tracked movie so we have
   // accurate opening weekend gross data for scoring.
   let backfillResult = null;
   let backfillMs = 0;
-  if (env.TMDB_TOKEN) {
+  if (quick) {
+    backfillResult = { skipped: "quick mode" };
+  } else if (env.TMDB_TOKEN) {
     const bt = Date.now();
     try {
       backfillResult = await backfillDailies({ db: env.DB, token: env.TMDB_TOKEN });
@@ -50,7 +55,9 @@ export async function runStandingsPost(env) {
   // inline eliminates the race with the 14:00 daily cron.
   let dailiesResult = null;
   let dailiesMs = 0;
-  if (env.TMDB_TOKEN) {
+  if (quick) {
+    dailiesResult = { skipped: "quick mode" };
+  } else if (env.TMDB_TOKEN) {
     const dt = Date.now();
     try {
       dailiesResult = await refreshDailies({ db: env.DB, token: env.TMDB_TOKEN });

@@ -34,9 +34,10 @@ export default {
     }
   },
 
-  // Manual trigger: GET /trigger?job=movies|dailies|settle|standings|lastcall
-  // Long-running jobs (standings, dailies) use ctx.waitUntil so the HTTP
-  // response returns immediately — results appear in the Worker logs, not here.
+  // Manual trigger: GET /trigger?job=movies|dailies|settle|standings|standings-full|lastcall
+  // HTTP-triggered ctx.waitUntil has a ~30s wall clock limit, so ?job=standings
+  // runs in quick mode (skips BOM scraping). Use standings-full for the complete
+  // flow (may time out on HTTP but works via cron's 15-min limit).
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname !== "/trigger") {
@@ -50,11 +51,13 @@ export default {
     } else if (job === "settle") {
       ctx.waitUntil(runSettleExpired(env));
     } else if (job === "standings") {
+      ctx.waitUntil(runStandingsPost(env, { quick: true }));
+    } else if (job === "standings-full") {
       ctx.waitUntil(runStandingsPost(env));
     } else if (job === "lastcall") {
       ctx.waitUntil(runLastCallPost(env));
     } else {
-      return new Response("job must be movies|dailies|settle|standings|lastcall", { status: 400 });
+      return new Response("job must be movies|dailies|settle|standings|standings-full|lastcall", { status: 400 });
     }
     return new Response(JSON.stringify({ started: job }), {
       headers: { "Content-Type": "application/json" },
