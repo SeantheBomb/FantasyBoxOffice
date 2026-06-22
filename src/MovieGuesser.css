@@ -1,0 +1,566 @@
+/* Movie Guesser — cinema marquee skin.
+   Extends the FBO theater aesthetic with marquee lights,
+   curtain textures, and film-strip accents. */
+
+.mg-page {
+  max-width: 580px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+/* ── Marquee header ── */
+.mg-marquee {
+  text-align: center;
+  padding: 20px 16px 18px;
+  margin-bottom: 20px;
+  background:
+    repeating-linear-gradient(90deg, #2a0c12 0 14px, #3a1018 14px 28px);
+  border: 3px double var(--fbo-gold);
+  border-radius: 8px;
+  box-shadow:
+    0 0 20px rgba(245, 210, 122, 0.08),
+    inset 0 0 30px rgba(0, 0, 0, 0.4);
+  position: relative;
+}
+.mg-marquee::before,
+.mg-marquee::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 20px;
+  background:
+    radial-gradient(circle 3px at 10px 8px, var(--fbo-gold) 60%, transparent 61%),
+    radial-gradient(circle 3px at 10px 24px, var(--fbo-gold-soft) 60%, transparent 61%),
+    radial-gradient(circle 3px at 10px 40px, var(--fbo-gold) 60%, transparent 61%),
+    radial-gradient(circle 3px at 10px 56px, var(--fbo-gold-soft) 60%, transparent 61%),
+    radial-gradient(circle 3px at 10px 72px, var(--fbo-gold) 60%, transparent 61%);
+  background-size: 20px 16px;
+  opacity: 0.5;
+}
+.mg-marquee::before { left: -1px; }
+.mg-marquee::after { right: -1px; }
+
+.mg-title {
+  font-family: "Georgia", serif;
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--fbo-gold);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin: 0 0 2px;
+  text-shadow: 0 0 10px rgba(245, 210, 122, 0.3);
+}
+.mg-title::after {
+  content: "";
+  display: block;
+  width: 50px;
+  height: 2px;
+  background: var(--fbo-red-soft);
+  margin: 6px auto 0;
+}
+
+.mg-subtitle {
+  font-size: 12px;
+  color: var(--fbo-text-muted);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin: 8px 0 0;
+}
+
+/* ── Now Showing clue card ── */
+.mg-clue-card {
+  background:
+    linear-gradient(135deg, rgba(143, 28, 42, 0.08) 0%, transparent 50%),
+    var(--fbo-bg-card);
+  border-radius: 8px;
+  padding: 24px 20px;
+  border: 1px solid var(--fbo-border);
+  margin-bottom: 16px;
+  text-align: center;
+  position: relative;
+}
+.mg-clue-card::before {
+  content: "NOW SHOWING";
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  color: var(--fbo-red-soft);
+  margin-bottom: 12px;
+  font-weight: 700;
+}
+.mg-clue-label {
+  font-size: 11px;
+  color: var(--fbo-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  margin-bottom: 4px;
+}
+.mg-clue-date {
+  font-family: "Georgia", serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--fbo-text);
+  margin-bottom: 16px;
+}
+.mg-clue-revenue {
+  font-family: "Georgia", serif;
+  font-size: 26px;
+  font-weight: 900;
+  color: var(--fbo-gold);
+  text-shadow: 0 0 8px rgba(245, 210, 122, 0.2);
+}
+
+/* ── Title reveal (Hangman) ── */
+.mg-title-reveal {
+  background: var(--fbo-bg-card);
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid var(--fbo-border);
+  margin-bottom: 16px;
+}
+.mg-title-reveal-label {
+  font-size: 10px;
+  color: var(--fbo-text-muted);
+  margin-bottom: 8px;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+}
+.mg-letter-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 3px;
+  margin-bottom: 10px;
+}
+.mg-letter {
+  width: 24px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-family: "Georgia", serif;
+  border-radius: 3px;
+}
+.mg-letter--blank {
+  color: var(--fbo-text-muted);
+  background: var(--fbo-bg-panel);
+  border: 1px solid var(--fbo-border);
+}
+.mg-letter--revealed {
+  color: var(--fbo-gold);
+  font-weight: 700;
+  background: rgba(245, 210, 122, 0.12);
+  border: 1px solid rgba(245, 210, 122, 0.35);
+  text-shadow: 0 0 6px rgba(245, 210, 122, 0.3);
+}
+.mg-letter--won {
+  color: var(--fbo-success);
+  font-weight: 700;
+  background: rgba(99, 211, 122, 0.12);
+  border: 1px solid rgba(99, 211, 122, 0.3);
+}
+
+.mg-eliminated {
+  text-align: center;
+  margin-top: 4px;
+}
+.mg-eliminated-label {
+  font-size: 10px;
+  color: var(--fbo-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-right: 6px;
+}
+.mg-eliminated-letter {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  line-height: 20px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.1);
+  border-radius: 3px;
+  margin: 0 2px;
+  text-decoration: line-through;
+}
+
+/* ── Win state ── */
+.mg-win {
+  background:
+    radial-gradient(ellipse at top, rgba(99, 211, 122, 0.06) 0%, transparent 60%),
+    var(--fbo-bg-card);
+  border-radius: 8px;
+  padding: 24px 20px;
+  border: 2px solid rgba(99, 211, 122, 0.3);
+  margin-bottom: 20px;
+  text-align: center;
+  box-shadow: 0 0 24px rgba(99, 211, 122, 0.06);
+}
+.mg-win-poster {
+  width: 140px;
+  border-radius: 6px;
+  margin-bottom: 14px;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.5),
+    0 0 0 2px rgba(245, 210, 122, 0.2);
+}
+.mg-win-title {
+  margin: 0 0 4px;
+  font-size: 22px;
+  font-family: "Georgia", serif;
+  color: var(--fbo-gold);
+}
+.mg-win-score {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--fbo-success);
+  font-weight: 600;
+}
+.mg-win-meta {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--fbo-text-muted);
+}
+.mg-win-countdown {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--fbo-text-muted);
+  letter-spacing: 0.05em;
+}
+
+/* ── Search input ── */
+.mg-search-wrap {
+  position: relative;
+  margin-bottom: 20px;
+}
+.mg-search-input {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--fbo-border);
+  background: var(--fbo-bg-panel);
+  color: var(--fbo-text);
+  font-size: 15px;
+  font-family: inherit;
+  text-transform: none;
+  font-weight: 400;
+  letter-spacing: normal;
+}
+.mg-search-input:focus {
+  outline: none;
+  border-color: var(--fbo-gold-soft);
+  box-shadow: 0 0 0 2px rgba(245, 210, 122, 0.15);
+}
+.mg-search-input::placeholder {
+  color: var(--fbo-text-muted);
+  font-style: italic;
+}
+
+.mg-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  background: var(--fbo-bg-panel);
+  border: 1px solid var(--fbo-border);
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  max-height: 300px;
+  overflow-y: auto;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+}
+.mg-dropdown-item {
+  padding: 8px 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: background 0.1s;
+}
+.mg-dropdown-item:hover,
+.mg-dropdown-item--selected {
+  background: var(--fbo-bg-card);
+}
+.mg-dropdown-poster {
+  width: 28px;
+  height: 42px;
+  border-radius: 3px;
+  object-fit: cover;
+}
+.mg-dropdown-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+.mg-search-spinner {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  color: var(--fbo-text-muted);
+  font-size: 11px;
+  font-style: italic;
+}
+
+/* ── Guess history ── */
+.mg-guesses-header {
+  font-size: 12px;
+  color: var(--fbo-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  margin: 0 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--fbo-border);
+}
+.mg-guesses-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mg-guess {
+  background: var(--fbo-bg-card);
+  border-radius: 6px;
+  padding: 10px 14px;
+  border: 1px solid var(--fbo-border);
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.mg-guess--correct {
+  background:
+    linear-gradient(135deg, rgba(99, 211, 122, 0.06) 0%, transparent 50%),
+    var(--fbo-bg-card);
+  border-color: rgba(99, 211, 122, 0.3);
+}
+.mg-guess-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.mg-guess-num--wrong {
+  background: var(--fbo-bg-panel);
+  color: var(--fbo-text-muted);
+}
+.mg-guess-num--correct {
+  background: var(--fbo-success);
+  color: #1a0000;
+}
+.mg-guess-poster {
+  width: 34px;
+  height: 50px;
+  border-radius: 3px;
+  object-fit: cover;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+.mg-guess-body {
+  flex: 1;
+  min-width: 0;
+}
+.mg-guess-title {
+  font-size: 14px;
+  font-weight: 600;
+  font-family: "Georgia", serif;
+}
+
+/* ── Hint rows ── */
+.mg-hints {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mg-hint-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.mg-hint-label {
+  font-size: 10px;
+  color: var(--fbo-text-muted);
+  width: 40px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.mg-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.mg-badge--match {
+  background: rgba(99, 211, 122, 0.15);
+  color: #63d37a;
+  border: 1px solid rgba(99, 211, 122, 0.3);
+}
+.mg-badge--miss {
+  background: rgba(255, 107, 107, 0.1);
+  color: #ff6b6b;
+  border: 1px solid rgba(255, 107, 107, 0.2);
+}
+
+/* ── How to play ── */
+.mg-howto {
+  background:
+    linear-gradient(135deg, rgba(143, 28, 42, 0.05) 0%, transparent 50%),
+    var(--fbo-bg-card);
+  border-radius: 8px;
+  padding: 18px 20px;
+  border: 1px solid var(--fbo-border);
+  font-size: 13px;
+  color: var(--fbo-text-muted);
+}
+.mg-howto h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--fbo-gold);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.mg-howto ul {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.9;
+}
+.mg-howto b {
+  color: var(--fbo-gold-soft);
+  font-weight: 600;
+}
+
+/* ── Stats panel ── */
+.mg-stats {
+  background: var(--fbo-bg-card);
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid var(--fbo-border);
+  margin-top: 16px;
+}
+.mg-stats-title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--fbo-gold);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.mg-stats-summary {
+  display: flex;
+  gap: 20px;
+  font-size: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  color: var(--fbo-text-muted);
+}
+.mg-stats-summary span {
+  color: var(--fbo-text);
+}
+.mg-distribution {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 12px;
+}
+.mg-dist-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.mg-dist-label {
+  width: 18px;
+  text-align: right;
+  color: var(--fbo-text-muted);
+  font-size: 11px;
+}
+.mg-dist-bar {
+  height: 14px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--fbo-gold-soft), var(--fbo-gold));
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 4px;
+  font-size: 10px;
+  color: #1a0000;
+  font-weight: 700;
+  min-width: 18px;
+}
+.mg-movies-header {
+  margin: 0 0 6px;
+  font-size: 11px;
+  color: var(--fbo-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.mg-movie-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  padding: 2px 0;
+}
+.mg-movie-row span:first-child {
+  color: var(--fbo-text);
+}
+.mg-movie-row span:last-child {
+  color: var(--fbo-text-muted);
+  flex-shrink: 0;
+  margin-left: 8px;
+  font-size: 11px;
+}
+
+/* ── Admin buttons ── */
+.mg-admin-bar {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+.mg-admin-btn {
+  flex: 1;
+  padding: 6px 14px;
+  border-radius: 4px;
+  border: 1px solid var(--fbo-border) !important;
+  background: var(--fbo-bg-panel) !important;
+  color: var(--fbo-text-muted) !important;
+  font-size: 11px !important;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.mg-admin-btn:hover {
+  border-color: var(--fbo-gold-soft) !important;
+  color: var(--fbo-text) !important;
+}
+
+/* ── Share button ── */
+.mg-share-btn {
+  padding: 10px 24px !important;
+  border-radius: 4px;
+  border: 1px solid #b58d37 !important;
+  font-size: 13px !important;
+  letter-spacing: 0.08em;
+}
+
+/* ── Responsive ── */
+@media (max-width: 500px) {
+  .mg-marquee { padding: 16px 12px 14px; }
+  .mg-title { font-size: 22px; letter-spacing: 0.08em; }
+  .mg-clue-date { font-size: 20px; }
+  .mg-clue-revenue { font-size: 22px; }
+  .mg-letter { width: 20px; height: 26px; font-size: 13px; }
+  .mg-guess-poster { width: 28px; height: 42px; }
+}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useUser } from "../useUser";
 import { apiGuesserToday, apiGuesserGuess, apiGuesserSearch, apiGuesserComplete, apiGuesserRegenerate } from "../api";
+import "../MovieGuesser.css";
 
 const STORAGE_KEY = "fbo_guesser_";
 const PLAYER_ID_KEY = "fbo_guesser_player_id";
@@ -60,66 +61,42 @@ function Countdown() {
   return <span>{left}</span>;
 }
 
-// Hangman-style title display
 function TitleReveal({ titleLength, revealedPositions, eliminatedLetters, won, answerTitle }) {
   if (won && answerTitle) {
     return (
       <div style={{ textAlign: "center", marginBottom: 16 }}>
-        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 3 }}>
+        <div className="mg-letter-grid">
           {answerTitle.split("").map((ch, i) => (
-            <span key={i} style={{
-              width: 22, height: 28, display: "inline-flex", alignItems: "center", justifyContent: "center",
-              fontSize: 14, fontWeight: 700, color: "var(--fbo-success)",
-              background: "rgba(99, 211, 122, 0.15)", borderRadius: 3,
-              border: "1px solid rgba(99, 211, 122, 0.3)",
-            }}>{ch}</span>
+            <span key={i} className="mg-letter mg-letter--won">{ch}</span>
           ))}
         </div>
       </div>
     );
   }
 
-  // Build the revealed map from accumulated positions
   const revealed = {};
   for (const { index, char } of revealedPositions) {
     revealed[index] = char;
   }
 
   return (
-    <div style={{
-      background: "var(--fbo-bg-card)", borderRadius: 8, padding: 16,
-      border: "1px solid var(--fbo-border)", marginBottom: 16,
-    }}>
-      <div style={{ fontSize: 11, color: "var(--fbo-text-muted)", marginBottom: 8, textAlign: "center" }}>
-        Title ({titleLength} characters)
-      </div>
-      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 3, marginBottom: 12 }}>
+    <div className="mg-title-reveal">
+      <div className="mg-title-reveal-label">Title — {titleLength} characters</div>
+      <div className="mg-letter-grid">
         {Array.from({ length: titleLength }, (_, i) => {
           const ch = revealed[i];
           return (
-            <span key={i} style={{
-              width: 22, height: 28, display: "inline-flex", alignItems: "center", justifyContent: "center",
-              fontSize: 14, fontWeight: ch ? 700 : 400,
-              color: ch ? "var(--fbo-gold)" : "var(--fbo-text-muted)",
-              background: ch ? "rgba(245, 210, 122, 0.12)" : "var(--fbo-bg-panel)",
-              borderRadius: 3,
-              border: `1px solid ${ch ? "rgba(245, 210, 122, 0.3)" : "var(--fbo-border)"}`,
-            }}>
+            <span key={i} className={`mg-letter ${ch ? "mg-letter--revealed" : "mg-letter--blank"}`}>
               {ch || "·"}
             </span>
           );
         })}
       </div>
       {eliminatedLetters.length > 0 && (
-        <div style={{ textAlign: "center" }}>
-          <span style={{ fontSize: 11, color: "var(--fbo-text-muted)", marginRight: 6 }}>Not in title:</span>
+        <div className="mg-eliminated">
+          <span className="mg-eliminated-label">Eliminated:</span>
           {eliminatedLetters.sort().map((l) => (
-            <span key={l} style={{
-              display: "inline-block", width: 20, height: 20, lineHeight: "20px",
-              textAlign: "center", fontSize: 11, fontWeight: 600,
-              color: "#ff6b6b", background: "rgba(255, 107, 107, 0.1)",
-              borderRadius: 3, margin: "0 2px",
-            }}>{l.toUpperCase()}</span>
+            <span key={l} className="mg-eliminated-letter">{l.toUpperCase()}</span>
           ))}
         </div>
       )}
@@ -129,13 +106,7 @@ function TitleReveal({ titleLength, revealedPositions, eliminatedLetters, won, a
 
 function HintBadge({ label, match }) {
   return (
-    <span style={{
-      display: "inline-block", padding: "2px 8px", borderRadius: 4,
-      fontSize: 11, fontWeight: 600,
-      background: match ? "rgba(99, 211, 122, 0.15)" : "rgba(255, 107, 107, 0.15)",
-      color: match ? "#63d37a" : "#ff6b6b",
-      border: `1px solid ${match ? "rgba(99, 211, 122, 0.3)" : "rgba(255, 107, 107, 0.3)"}`,
-    }}>
+    <span className={`mg-badge ${match ? "mg-badge--match" : "mg-badge--miss"}`}>
       {match ? "✓" : "✗"} {label}
     </span>
   );
@@ -143,12 +114,12 @@ function HintBadge({ label, match }) {
 
 function HintRow({ label, items, matchingSet }) {
   return (
-    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-      <span style={{ fontSize: 11, color: "var(--fbo-text-muted)", width: 42, flexShrink: 0 }}>{label}</span>
+    <div className="mg-hint-row">
+      <span className="mg-hint-label">{label}</span>
       {items.length > 0 ? items.map((item) => (
         <HintBadge key={item} label={item} match={matchingSet.has(item)} />
       )) : (
-        <span style={{ fontSize: 11, color: "var(--fbo-text-muted)" }}>Unknown</span>
+        <span style={{ fontSize: 10, color: "var(--fbo-text-muted)" }}>Unknown</span>
       )}
     </div>
   );
@@ -159,7 +130,7 @@ function GuessHints({ guess }) {
   const matchingCompanies = new Set(guess.matching_companies || []);
   const matchingCast = new Set(guess.matching_cast || []);
   return (
-    <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 4 }}>
+    <div className="mg-hints">
       <HintRow label="Genre" items={guess.guessed_genres || []} matchingSet={matchingGenres} />
       <HintRow label="Studio" items={guess.guessed_companies || []} matchingSet={matchingCompanies} />
       <HintRow label="Cast" items={guess.guessed_cast || []} matchingSet={matchingCast} />
@@ -172,33 +143,23 @@ function StatsPanel({ stats }) {
   const maxCount = Math.max(...(stats.distribution || []).map((d) => d.count), 1);
   const guessedMovies = stats.guessed_movies || [];
   return (
-    <div style={{
-      background: "var(--fbo-bg-card)", borderRadius: 8, padding: 16,
-      border: "1px solid var(--fbo-border)", marginTop: 16,
-    }}>
-      <h3 style={{ margin: "0 0 8px", fontSize: 15, color: "var(--fbo-gold)" }}>
-        Today's Stats
-      </h3>
+    <div className="mg-stats">
+      <h3 className="mg-stats-title">Today's Stats</h3>
       {(stats.total_started > 0 || stats.total_players > 0) && (
         <>
-          <div style={{ display: "flex", gap: 24, fontSize: 13, marginBottom: 12, flexWrap: "wrap" }}>
+          <div className="mg-stats-summary">
             {stats.total_started > 0 && <span>{stats.total_started} started</span>}
             <span>{stats.total_players} solved</span>
             {stats.total_players > 0 && <span>Avg: {stats.avg_guesses} guesses</span>}
             {stats.total_players > 0 && <span>Best: {stats.best_score}</span>}
           </div>
           {(stats.distribution || []).length > 0 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }}>
+            <div className="mg-distribution">
               {stats.distribution.map((d) => (
-                <div key={d.guesses} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-                  <span style={{ width: 20, textAlign: "right", color: "var(--fbo-text-muted)" }}>{d.guesses}</span>
-                  <div style={{
-                    height: 16, borderRadius: 3,
-                    background: "var(--fbo-gold)",
+                <div key={d.guesses} className="mg-dist-row">
+                  <span className="mg-dist-label">{d.guesses}</span>
+                  <div className="mg-dist-bar" style={{
                     width: `${Math.max((d.count / maxCount) * 100, 8)}%`,
-                    minWidth: 20,
-                    display: "flex", alignItems: "center", justifyContent: "flex-end",
-                    paddingRight: 4, fontSize: 11, color: "#1a0000", fontWeight: 600,
                   }}>
                     {d.count}
                   </div>
@@ -210,19 +171,12 @@ function StatsPanel({ stats }) {
       )}
       {guessedMovies.length > 0 && (
         <>
-          <h4 style={{ margin: "0 0 6px", fontSize: 13, color: "var(--fbo-text-muted)" }}>
-            Movies Guessed
-          </h4>
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <h4 className="mg-movies-header">Movies Guessed</h4>
+          <div>
             {guessedMovies.map((m) => (
-              <div key={m.tmdb_id} style={{
-                display: "flex", justifyContent: "space-between", alignItems: "center",
-                fontSize: 12, padding: "2px 0",
-              }}>
-                <span style={{ color: "var(--fbo-text)" }}>{m.title}</span>
-                <span style={{ color: "var(--fbo-text-muted)", flexShrink: 0, marginLeft: 8 }}>
-                  {m.times_guessed} player{m.times_guessed !== 1 ? "s" : ""}
-                </span>
+              <div key={m.tmdb_id} className="mg-movie-row">
+                <span>{m.title}</span>
+                <span>{m.times_guessed} player{m.times_guessed !== 1 ? "s" : ""}</span>
               </div>
             ))}
           </div>
@@ -232,7 +186,6 @@ function StatsPanel({ stats }) {
   );
 }
 
-// Format search results: only show year when there are duplicate titles
 function formatSearchResults(results) {
   const titleCounts = {};
   for (const r of results) {
@@ -241,7 +194,6 @@ function formatSearchResults(results) {
   return results.map((r) => ({
     ...r,
     display: titleCounts[r.title] > 1 ? `${r.title} (${r.release_year || "?"})` : r.title,
-    showYear: titleCounts[r.title] > 1,
   }));
 }
 
@@ -256,7 +208,6 @@ export default function MovieGuesser() {
   const [stats, setStats] = useState(null);
   const reportedRef = useRef(false);
 
-  // Search state
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -268,7 +219,6 @@ export default function MovieGuesser() {
   const dropdownRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Accumulate letter hints across all guesses
   const { revealedPositions, eliminatedLetters } = useMemo(() => {
     const posMap = {};
     const elimSet = new Set();
@@ -441,9 +391,18 @@ export default function MovieGuesser() {
     } catch { /* fallback */ }
   }
 
+  function resetLocalState() {
+    if (puzzle) localStorage.removeItem(STORAGE_KEY + puzzle.game_date);
+    setGuesses([]);
+    setWon(false);
+    setAnswer(null);
+    setStats(null);
+    reportedRef.current = false;
+  }
+
   if (loading) {
     return (
-      <div style={{ textAlign: "center", padding: 40 }}>
+      <div className="mg-page" style={{ textAlign: "center", paddingTop: 60 }}>
         <p style={{ color: "var(--fbo-text-muted)" }}>Loading puzzle...</p>
       </div>
     );
@@ -451,37 +410,29 @@ export default function MovieGuesser() {
 
   if (error) {
     return (
-      <div style={{ textAlign: "center", padding: 40 }}>
+      <div className="mg-page" style={{ textAlign: "center", paddingTop: 60 }}>
         <p style={{ color: "var(--fbo-danger)" }}>{error}</p>
       </div>
     );
   }
 
   return (
-    <div style={{ maxWidth: 560, margin: "0 auto", padding: "24px 16px" }}>
-      <h1 style={{ textAlign: "center", fontSize: 24, color: "var(--fbo-gold)", marginBottom: 4 }}>
-        Movie Guesser
-      </h1>
-      <p style={{ textAlign: "center", color: "var(--fbo-text-muted)", fontSize: 13, margin: "0 0 20px" }}>
-        Guess the movie from its release date and box office revenue
-      </p>
-
-      {/* Clue card */}
-      <div style={{
-        background: "var(--fbo-bg-card)", borderRadius: 8, padding: 20,
-        border: "1px solid var(--fbo-border)", marginBottom: 16, textAlign: "center",
-      }}>
-        <div style={{ fontSize: 13, color: "var(--fbo-text-muted)", marginBottom: 4 }}>Released</div>
-        <div style={{ fontSize: 22, fontWeight: 700, color: "var(--fbo-text)", marginBottom: 12 }}>
-          {fmtDate(puzzle.release_date)}
-        </div>
-        <div style={{ fontSize: 13, color: "var(--fbo-text-muted)", marginBottom: 4 }}>Worldwide Revenue</div>
-        <div style={{ fontSize: 22, fontWeight: 700, color: "var(--fbo-gold)" }}>
-          {fmtRevenue(puzzle.revenue)}
-        </div>
+    <div className="mg-page">
+      {/* Marquee header */}
+      <div className="mg-marquee">
+        <h1 className="mg-title">Movie Guesser</h1>
+        <p className="mg-subtitle">Guess the movie from its release date and revenue</p>
       </div>
 
-      {/* Hangman-style title reveal */}
+      {/* Now Showing clue card */}
+      <div className="mg-clue-card">
+        <div className="mg-clue-label">Released</div>
+        <div className="mg-clue-date">{fmtDate(puzzle.release_date)}</div>
+        <div className="mg-clue-label">Worldwide Revenue</div>
+        <div className="mg-clue-revenue">{fmtRevenue(puzzle.revenue)}</div>
+      </div>
+
+      {/* Hangman title reveal */}
       {puzzle.title_length && (
         <TitleReveal
           titleLength={puzzle.title_length}
@@ -494,52 +445,33 @@ export default function MovieGuesser() {
 
       {/* Win state */}
       {won && answer && (
-        <div style={{
-          background: "rgba(99, 211, 122, 0.08)", borderRadius: 8, padding: 20,
-          border: "1px solid rgba(99, 211, 122, 0.3)", marginBottom: 20, textAlign: "center",
-        }}>
+        <div className="mg-win">
           {answer.poster_url && (
-            <img src={answer.poster_url} alt={answer.title}
-              style={{ width: 120, borderRadius: 6, marginBottom: 12, boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }} />
+            <img src={answer.poster_url} alt={answer.title} className="mg-win-poster" />
           )}
-          <h2 style={{ margin: "0 0 4px", fontSize: 20, color: "var(--fbo-success)" }}>
-            {answer.title}
-          </h2>
-          <p style={{ margin: "0 0 8px", fontSize: 14, color: "var(--fbo-text-muted)" }}>
+          <h2 className="mg-win-title">{answer.title}</h2>
+          <p className="mg-win-score">
             Solved in {guesses.length} guess{guesses.length !== 1 ? "es" : ""}!
           </p>
           {answer.genres && (
-            <p style={{ margin: "0 0 4px", fontSize: 12, color: "var(--fbo-text-muted)" }}>
-              {answer.genres.join(" · ")}
-            </p>
+            <p className="mg-win-meta">{answer.genres.join(" · ")}</p>
           )}
           {answer.production_companies?.length > 0 && (
-            <p style={{ margin: "0 0 4px", fontSize: 12, color: "var(--fbo-text-muted)" }}>
-              {answer.production_companies.join(" · ")}
-            </p>
+            <p className="mg-win-meta">{answer.production_companies.join(" · ")}</p>
           )}
           {answer.top_cast?.length > 0 && (
-            <p style={{ margin: "0 0 12px", fontSize: 12, color: "var(--fbo-text-muted)" }}>
+            <p className="mg-win-meta" style={{ marginBottom: 14 }}>
               {answer.top_cast.slice(0, 5).join(" · ")}
             </p>
           )}
-          <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-            <button onClick={handleShare} style={{
-              padding: "8px 16px", borderRadius: 4, border: "none", cursor: "pointer",
-              background: "var(--fbo-gold)", color: "#1a0000", fontWeight: 700, fontSize: 13,
-            }}>
-              Copy Results
-            </button>
-          </div>
-          <p style={{ marginTop: 12, fontSize: 13, color: "var(--fbo-text-muted)" }}>
-            Next puzzle in <Countdown />
-          </p>
+          <button onClick={handleShare} className="mg-share-btn">Copy Results</button>
+          <p className="mg-win-countdown">Next puzzle in <Countdown /></p>
         </div>
       )}
 
       {/* Search input */}
       {!won && (
-        <div ref={dropdownRef} style={{ position: "relative", marginBottom: 20 }}>
+        <div ref={dropdownRef} className="mg-search-wrap">
           <input
             ref={inputRef}
             type="text"
@@ -547,76 +479,44 @@ export default function MovieGuesser() {
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             onFocus={() => formattedResults.length && setShowDropdown(true)}
-            placeholder="Type a movie name..."
+            placeholder="Search for a movie..."
             disabled={submitting}
-            style={{
-              width: "100%", padding: "10px 14px", borderRadius: 6,
-              border: "1px solid var(--fbo-border)", background: "var(--fbo-bg-panel)",
-              color: "var(--fbo-text)", fontSize: 15, outline: "none",
-            }}
+            className="mg-search-input"
           />
           {showDropdown && formattedResults.length > 0 && (
-            <div style={{
-              position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10,
-              background: "var(--fbo-bg-panel)", border: "1px solid var(--fbo-border)",
-              borderRadius: "0 0 6px 6px", maxHeight: 280, overflowY: "auto",
-              boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
-            }}>
+            <div className="mg-dropdown">
               {formattedResults.map((m, i) => (
                 <div key={m.tmdb_id}
                   onClick={() => submitGuess(m)}
                   onMouseEnter={() => setSelectedIdx(i)}
-                  style={{
-                    padding: "8px 14px", cursor: "pointer", display: "flex",
-                    alignItems: "center", gap: 10,
-                    background: i === selectedIdx ? "var(--fbo-bg-card)" : "transparent",
-                  }}>
+                  className={`mg-dropdown-item ${i === selectedIdx ? "mg-dropdown-item--selected" : ""}`}>
                   {m.poster_url && (
-                    <img src={m.poster_url} alt="" style={{ width: 28, height: 42, borderRadius: 3, objectFit: "cover" }} />
+                    <img src={m.poster_url} alt="" className="mg-dropdown-poster" />
                   )}
-                  <div style={{ fontSize: 14, fontWeight: 500 }}>{m.display}</div>
+                  <span className="mg-dropdown-title">{m.display}</span>
                 </div>
               ))}
             </div>
           )}
-          {searching && (
-            <div style={{ position: "absolute", right: 12, top: 12, color: "var(--fbo-text-muted)", fontSize: 12 }}>
-              searching...
-            </div>
-          )}
+          {searching && <span className="mg-search-spinner">searching...</span>}
         </div>
       )}
 
       {/* Guess history */}
       {guesses.length > 0 && (
         <div>
-          <h3 style={{ fontSize: 14, color: "var(--fbo-text-muted)", margin: "0 0 8px" }}>
-            Guesses ({guesses.length})
-          </h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <h3 className="mg-guesses-header">Guesses ({guesses.length})</h3>
+          <div className="mg-guesses-list">
             {guesses.map((g, i) => (
-              <div key={g.tmdb_id} style={{
-                background: g.correct ? "rgba(99, 211, 122, 0.08)" : "var(--fbo-bg-card)",
-                borderRadius: 6, padding: "10px 14px",
-                border: `1px solid ${g.correct ? "rgba(99, 211, 122, 0.3)" : "var(--fbo-border)"}`,
-                display: "flex", alignItems: "flex-start", gap: 10,
-              }}>
-                <span style={{
-                  width: 22, height: 22, borderRadius: "50%", display: "flex",
-                  alignItems: "center", justifyContent: "center", fontSize: 11,
-                  fontWeight: 700, flexShrink: 0, marginTop: 2,
-                  background: g.correct ? "var(--fbo-success)" : "var(--fbo-bg-panel)",
-                  color: g.correct ? "#1a0000" : "var(--fbo-text-muted)",
-                }}>
+              <div key={g.tmdb_id} className={`mg-guess ${g.correct ? "mg-guess--correct" : ""}`}>
+                <span className={`mg-guess-num ${g.correct ? "mg-guess-num--correct" : "mg-guess-num--wrong"}`}>
                   {i + 1}
                 </span>
                 {g.poster_url && (
-                  <img src={g.poster_url} alt="" style={{
-                    width: 32, height: 48, borderRadius: 3, objectFit: "cover", flexShrink: 0,
-                  }} />
+                  <img src={g.poster_url} alt="" className="mg-guess-poster" />
                 )}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 500 }}>{g.title}</div>
+                <div className="mg-guess-body">
+                  <div className="mg-guess-title">{g.title}</div>
                   {!g.correct && <GuessHints guess={g} />}
                 </div>
               </div>
@@ -627,12 +527,9 @@ export default function MovieGuesser() {
 
       {/* How to play */}
       {!won && guesses.length === 0 && (
-        <div style={{
-          background: "var(--fbo-bg-card)", borderRadius: 8, padding: 16,
-          border: "1px solid var(--fbo-border)", fontSize: 13, color: "var(--fbo-text-muted)",
-        }}>
-          <h3 style={{ margin: "0 0 8px", fontSize: 14, color: "var(--fbo-text)" }}>How to Play</h3>
-          <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 1.8 }}>
+        <div className="mg-howto">
+          <h3>How to Play</h3>
+          <ul>
             <li>A movie was released near the date shown above — guess which one!</li>
             <li>After each wrong guess, you'll see which <b>genres</b>, <b>studios</b>, or <b>actors</b> match</li>
             <li>Letters in the right position get revealed, and eliminated letters are shown</li>
@@ -644,42 +541,22 @@ export default function MovieGuesser() {
       <StatsPanel stats={stats} />
 
       {user?.is_admin && puzzle && (
-        <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-          <button onClick={() => {
-            localStorage.removeItem(STORAGE_KEY + puzzle.game_date);
-            setGuesses([]);
-            setWon(false);
-            setAnswer(null);
-            setStats(null);
-            reportedRef.current = false;
-          }} style={{
-            flex: 1, padding: "6px 14px", borderRadius: 4, border: "1px solid var(--fbo-border)",
-            background: "var(--fbo-bg-panel)", color: "var(--fbo-text-muted)", fontSize: 12,
-            cursor: "pointer",
-          }}>
-            Reset My Game (Admin)
+        <div className="mg-admin-bar">
+          <button onClick={resetLocalState} className="mg-admin-btn">
+            Reset My Game
           </button>
           <button onClick={async () => {
             const res = await apiGuesserRegenerate();
             if (!res.ok) return;
-            localStorage.removeItem(STORAGE_KEY + puzzle.game_date);
-            setGuesses([]);
-            setWon(false);
-            setAnswer(null);
-            setStats(null);
-            reportedRef.current = false;
+            resetLocalState();
             setPuzzle({
               ...puzzle,
               release_date: res.data.release_date,
               revenue: res.data.revenue,
               title_length: res.data.title_length,
             });
-          }} style={{
-            flex: 1, padding: "6px 14px", borderRadius: 4, border: "1px solid var(--fbo-border)",
-            background: "var(--fbo-bg-panel)", color: "var(--fbo-text-muted)", fontSize: 12,
-            cursor: "pointer",
-          }}>
-            New Puzzle (Admin)
+          }} className="mg-admin-btn">
+            New Puzzle
           </button>
         </div>
       )}
