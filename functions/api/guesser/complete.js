@@ -7,10 +7,12 @@ export async function onRequestPost({ request, env }) {
   }
 
   const today = new Date().toISOString().slice(0, 10);
+  const playerId = body.player_id || "anonymous";
 
+  // Dedup: only one completion per player per day
   await env.DB.prepare(
-    `INSERT INTO guesser_completions (game_date, num_guesses) VALUES (?, ?)`
-  ).bind(today, body.num_guesses).run();
+    `INSERT OR IGNORE INTO guesser_completions (game_date, num_guesses, player_id) VALUES (?, ?, ?)`
+  ).bind(today, body.num_guesses, playerId).run();
 
   // Return updated stats
   const stats = await env.DB.prepare(

@@ -3,6 +3,16 @@ import { useUser } from "../useUser";
 import { apiGuesserToday, apiGuesserGuess, apiGuesserSearch, apiGuesserComplete } from "../api";
 
 const STORAGE_KEY = "fbo_guesser_";
+const PLAYER_ID_KEY = "fbo_guesser_player_id";
+
+function getPlayerId() {
+  let id = localStorage.getItem(PLAYER_ID_KEY);
+  if (!id) {
+    id = crypto.randomUUID?.() || Math.random().toString(36).slice(2) + Date.now().toString(36);
+    localStorage.setItem(PLAYER_ID_KEY, id);
+  }
+  return id;
+}
 
 function getStoredGame(date) {
   try {
@@ -131,54 +141,36 @@ function HintBadge({ label, match }) {
   );
 }
 
+function HintRow({ label, items, matchingSet }) {
+  return (
+    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+      <span style={{ fontSize: 11, color: "var(--fbo-text-muted)", width: 42, flexShrink: 0 }}>{label}</span>
+      {items.length > 0 ? items.map((item) => (
+        <HintBadge key={item} label={item} match={matchingSet.has(item)} />
+      )) : (
+        <span style={{ fontSize: 11, color: "var(--fbo-text-muted)" }}>Unknown</span>
+      )}
+    </div>
+  );
+}
+
 function GuessHints({ guess }) {
-  const matchingSet = new Set(guess.matching_genres || []);
-  const allGenres = guess.guessed_genres || [];
+  const matchingGenres = new Set(guess.matching_genres || []);
+  const matchingCompanies = new Set(guess.matching_companies || []);
+  const matchingCast = new Set(guess.matching_cast || []);
   return (
     <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 4 }}>
-      {/* Genres — each one individually marked */}
-      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-        <span style={{ fontSize: 11, color: "var(--fbo-text-muted)", width: 42, flexShrink: 0 }}>Genre</span>
-        {allGenres.length > 0 ? allGenres.map((g) => (
-          <HintBadge key={g} label={g} match={matchingSet.has(g)} />
-        )) : (
-          <HintBadge label="None" match={false} />
-        )}
-      </div>
-      {/* Studio */}
-      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-        <span style={{ fontSize: 11, color: "var(--fbo-text-muted)", width: 42, flexShrink: 0 }}>Studio</span>
-        {(guess.guessed_companies || []).length > 0 ? (
-          <>
-            {guess.company_match && (guess.matching_companies || []).map((c) => (
-              <HintBadge key={c} label={c} match={true} />
-            ))}
-            {!guess.company_match && (
-              <span style={{ fontSize: 11, color: "var(--fbo-text-muted)" }}>
-                {(guess.guessed_companies || []).join(", ")}
-              </span>
-            )}
-          </>
-        ) : (
-          <span style={{ fontSize: 11, color: "var(--fbo-text-muted)" }}>Unknown</span>
-        )}
-      </div>
-      {/* Actors */}
-      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-        <span style={{ fontSize: 11, color: "var(--fbo-text-muted)", width: 42, flexShrink: 0 }}>Actor</span>
-        {guess.cast_match ? (guess.matching_cast || []).map((c) => (
-          <HintBadge key={c} label={c} match={true} />
-        )) : (
-          <HintBadge label="No match" match={false} />
-        )}
-      </div>
+      <HintRow label="Genre" items={guess.guessed_genres || []} matchingSet={matchingGenres} />
+      <HintRow label="Studio" items={guess.guessed_companies || []} matchingSet={matchingCompanies} />
+      <HintRow label="Cast" items={guess.guessed_cast || []} matchingSet={matchingCast} />
     </div>
   );
 }
 
 function StatsPanel({ stats }) {
-  if (!stats || !stats.total_players) return null;
-  const maxCount = Math.max(...stats.distribution.map((d) => d.count), 1);
+  if (!stats || (!stats.total_players && !(stats.guessed_movies || []).length)) return null;
+  const maxCount = Math.max(...(stats.distribution || []).map((d) => d.count), 1);
+  const guessedMovies = stats.guessed_movies || [];
   return (
     <div style={{
       background: "var(--fbo-bg-card)", borderRadius: 8, padding: 16,
@@ -187,29 +179,53 @@ function StatsPanel({ stats }) {
       <h3 style={{ margin: "0 0 8px", fontSize: 15, color: "var(--fbo-gold)" }}>
         Today's Stats
       </h3>
-      <div style={{ display: "flex", gap: 24, fontSize: 13, marginBottom: 12 }}>
-        <span>{stats.total_players} player{stats.total_players !== 1 ? "s" : ""}</span>
-        <span>Avg: {stats.avg_guesses} guesses</span>
-        <span>Best: {stats.best_score}</span>
-      </div>
-      {stats.distribution.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          {stats.distribution.map((d) => (
-            <div key={d.guesses} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-              <span style={{ width: 20, textAlign: "right", color: "var(--fbo-text-muted)" }}>{d.guesses}</span>
-              <div style={{
-                height: 16, borderRadius: 3,
-                background: "var(--fbo-gold)",
-                width: `${Math.max((d.count / maxCount) * 100, 8)}%`,
-                minWidth: 20,
-                display: "flex", alignItems: "center", justifyContent: "flex-end",
-                paddingRight: 4, fontSize: 11, color: "#1a0000", fontWeight: 600,
-              }}>
-                {d.count}
-              </div>
+      {stats.total_players > 0 && (
+        <>
+          <div style={{ display: "flex", gap: 24, fontSize: 13, marginBottom: 12 }}>
+            <span>{stats.total_players} player{stats.total_players !== 1 ? "s" : ""}</span>
+            <span>Avg: {stats.avg_guesses} guesses</span>
+            <span>Best: {stats.best_score}</span>
+          </div>
+          {(stats.distribution || []).length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }}>
+              {stats.distribution.map((d) => (
+                <div key={d.guesses} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                  <span style={{ width: 20, textAlign: "right", color: "var(--fbo-text-muted)" }}>{d.guesses}</span>
+                  <div style={{
+                    height: 16, borderRadius: 3,
+                    background: "var(--fbo-gold)",
+                    width: `${Math.max((d.count / maxCount) * 100, 8)}%`,
+                    minWidth: 20,
+                    display: "flex", alignItems: "center", justifyContent: "flex-end",
+                    paddingRight: 4, fontSize: 11, color: "#1a0000", fontWeight: 600,
+                  }}>
+                    {d.count}
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+        </>
+      )}
+      {guessedMovies.length > 0 && (
+        <>
+          <h4 style={{ margin: "0 0 6px", fontSize: 13, color: "var(--fbo-text-muted)" }}>
+            Movies Guessed
+          </h4>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {guessedMovies.map((m) => (
+              <div key={m.tmdb_id} style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                fontSize: 12, padding: "2px 0",
+              }}>
+                <span style={{ color: "var(--fbo-text)" }}>{m.title}</span>
+                <span style={{ color: "var(--fbo-text-muted)", flexShrink: 0, marginLeft: 8 }}>
+                  {m.times_guessed} player{m.times_guessed !== 1 ? "s" : ""}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
@@ -354,7 +370,8 @@ export default function MovieGuesser() {
     setShowDropdown(false);
     setQuery("");
 
-    const res = await apiGuesserGuess(movie.tmdb_id);
+    const playerId = getPlayerId();
+    const res = await apiGuesserGuess(movie.tmdb_id, movie.title, playerId);
     if (!res.ok) {
       setSubmitting(false);
       return;
@@ -374,6 +391,7 @@ export default function MovieGuesser() {
       matching_cast: res.data.matching_cast || [],
       guessed_genres: res.data.guessed_genres || [],
       guessed_companies: res.data.guessed_companies || [],
+      guessed_cast: res.data.guessed_cast || [],
       revealed_positions: res.data.revealed_positions || [],
       eliminated_letters: res.data.eliminated_letters || [],
     };
@@ -395,7 +413,7 @@ export default function MovieGuesser() {
       setAnswer(answerData);
 
       if (!reportedRef.current) {
-        const completeRes = await apiGuesserComplete(newGuesses.length);
+        const completeRes = await apiGuesserComplete(newGuesses.length, playerId);
         if (completeRes.ok) setStats(completeRes.data.stats);
         reportedRef.current = true;
       }
@@ -580,17 +598,22 @@ export default function MovieGuesser() {
                 background: g.correct ? "rgba(99, 211, 122, 0.08)" : "var(--fbo-bg-card)",
                 borderRadius: 6, padding: "10px 14px",
                 border: `1px solid ${g.correct ? "rgba(99, 211, 122, 0.3)" : "var(--fbo-border)"}`,
-                display: "flex", alignItems: "center", gap: 12,
+                display: "flex", alignItems: "flex-start", gap: 10,
               }}>
                 <span style={{
-                  width: 24, height: 24, borderRadius: "50%", display: "flex",
-                  alignItems: "center", justifyContent: "center", fontSize: 12,
-                  fontWeight: 700, flexShrink: 0,
+                  width: 22, height: 22, borderRadius: "50%", display: "flex",
+                  alignItems: "center", justifyContent: "center", fontSize: 11,
+                  fontWeight: 700, flexShrink: 0, marginTop: 2,
                   background: g.correct ? "var(--fbo-success)" : "var(--fbo-bg-panel)",
                   color: g.correct ? "#1a0000" : "var(--fbo-text-muted)",
                 }}>
                   {i + 1}
                 </span>
+                {g.poster_url && (
+                  <img src={g.poster_url} alt="" style={{
+                    width: 32, height: 48, borderRadius: 3, objectFit: "cover", flexShrink: 0,
+                  }} />
+                )}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 500 }}>{g.title}</div>
                   {!g.correct && <GuessHints guess={g} />}

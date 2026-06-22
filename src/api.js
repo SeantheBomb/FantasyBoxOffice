@@ -135,11 +135,11 @@ export const apiAdminCreatePick = (pick) =>
 
 // Movie Guesser (public, no auth)
 export const apiGuesserToday = () => jsonFetch("/api/guesser/today");
-export const apiGuesserGuess = (tmdbId) =>
-  jsonFetch("/api/guesser/guess", { method: "POST", body: { tmdb_id: tmdbId } });
+export const apiGuesserGuess = (tmdbId, title, playerId) =>
+  jsonFetch("/api/guesser/guess", { method: "POST", body: { tmdb_id: tmdbId, title, player_id: playerId } });
 export const apiGuesserSearch = (q) => jsonFetch(`/api/guesser/search?q=${encodeURIComponent(q)}`);
-export const apiGuesserComplete = (numGuesses) =>
-  jsonFetch("/api/guesser/complete", { method: "POST", body: { num_guesses: numGuesses } });
+export const apiGuesserComplete = (numGuesses, playerId) =>
+  jsonFetch("/api/guesser/complete", { method: "POST", body: { num_guesses: numGuesses, player_id: playerId } });
 
 // Betting / weekend predictions (public)
 export const apiBettingCurrent = () => jsonFetch("/api/betting/current");

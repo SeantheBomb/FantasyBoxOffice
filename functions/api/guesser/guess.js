@@ -12,6 +12,18 @@ export async function onRequestPost({ request, env }) {
   if (!answer) return json({ error: "No puzzle today" }, { status: 404 });
 
   const guessedId = Number(body.tmdb_id);
+  const playerId = body.player_id || "anonymous";
+
+  // Record this guess (deduped by player + movie + date)
+  try {
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO guesser_guesses (game_date, guessed_tmdb_id, guessed_title, player_id)
+       VALUES (?, ?, ?, ?)`
+    ).bind(today, guessedId, body.title || "", playerId).run();
+  } catch {
+    // table may not exist yet — self-healing happens on /today
+  }
+
   if (guessedId === answer.tmdb_id) {
     return json({
       correct: true,

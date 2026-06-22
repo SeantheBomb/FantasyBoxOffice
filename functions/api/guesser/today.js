@@ -12,7 +12,7 @@ export async function onRequestGet({ env }) {
     return json({ error: "No movie found for today" }, { status: 404 });
   }
 
-  // Aggregate stats
+  // Aggregate completion stats
   const stats = await env.DB.prepare(
     `SELECT COUNT(*) as total_players,
             ROUND(AVG(num_guesses), 1) as avg_guesses,
@@ -24,6 +24,13 @@ export async function onRequestGet({ env }) {
     `SELECT num_guesses, COUNT(*) as count
      FROM guesser_completions WHERE game_date = ?
      GROUP BY num_guesses ORDER BY num_guesses`
+  ).bind(today).all();
+
+  // Movies guessed today (unique players per movie)
+  const guessedMovies = await env.DB.prepare(
+    `SELECT guessed_title, guessed_tmdb_id, COUNT(DISTINCT player_id) as times_guessed
+     FROM guesser_guesses WHERE game_date = ? AND guessed_title != ''
+     GROUP BY guessed_tmdb_id ORDER BY times_guessed DESC`
   ).bind(today).all();
 
   return json({
@@ -39,11 +46,16 @@ export async function onRequestGet({ env }) {
         guesses: r.num_guesses,
         count: r.count,
       })),
+      guessed_movies: (guessedMovies?.results || []).map((r) => ({
+        title: r.guessed_title,
+        tmdb_id: r.guessed_tmdb_id,
+        times_guessed: r.times_guessed,
+      })),
     },
   });
 }
 
-// Self-healing schema bootstrap for the guesser tables
+// Self-healing schema bootstrap
 let guesserBootstrapped = false;
 async function bootstrapGuesserSchema(db) {
   if (guesserBootstrapped) return;
@@ -57,11 +69,27 @@ async function bootstrapGuesserSchema(db) {
     )`,
     `CREATE TABLE IF NOT EXISTS guesser_completions (
       id INTEGER PRIMARY KEY AUTOINCREMENT, game_date TEXT NOT NULL,
-      num_guesses INTEGER NOT NULL, completed_at TEXT DEFAULT (datetime('now'))
+      num_guesses INTEGER NOT NULL, player_id TEXT NOT NULL DEFAULT 'anonymous',
+      completed_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(game_date, player_id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS guesser_guesses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, game_date TEXT NOT NULL,
+      guessed_tmdb_id INTEGER NOT NULL, guessed_title TEXT NOT NULL DEFAULT '',
+      player_id TEXT NOT NULL DEFAULT 'anonymous',
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(game_date, guessed_tmdb_id, player_id)
     )`,
   ];
   for (const sql of stmts) {
     try { await db.prepare(sql).run(); } catch { /* already exists */ }
   }
+  // Add player_id column to completions if missing (existing table)
+  try {
+    await db.prepare(`ALTER TABLE guesser_completions ADD COLUMN player_id TEXT NOT NULL DEFAULT 'anonymous'`).run();
+  } catch { /* already exists */ }
+  try {
+    await db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_guesser_completions_player ON guesser_completions(game_date, player_id)`).run();
+  } catch { /* already exists */ }
   guesserBootstrapped = true;
 }
