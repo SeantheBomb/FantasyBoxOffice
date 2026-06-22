@@ -26,6 +26,12 @@ export async function onRequestGet({ env }) {
      GROUP BY num_guesses ORDER BY num_guesses`
   ).bind(today).all();
 
+  // How many unique players started (made at least one guess)
+  const started = await env.DB.prepare(
+    `SELECT COUNT(DISTINCT player_id) as total_started
+     FROM guesser_guesses WHERE game_date = ?`
+  ).bind(today).first();
+
   // Movies guessed today (unique players per movie)
   const guessedMovies = await env.DB.prepare(
     `SELECT guessed_title, guessed_tmdb_id, COUNT(DISTINCT player_id) as times_guessed
@@ -39,6 +45,7 @@ export async function onRequestGet({ env }) {
     revenue: movie.revenue,
     title_length: movie.title.length,
     stats: {
+      total_started: started?.total_started || 0,
       total_players: stats?.total_players || 0,
       avg_guesses: stats?.avg_guesses || 0,
       best_score: stats?.best_score || 0,

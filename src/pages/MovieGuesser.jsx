@@ -179,12 +179,13 @@ function StatsPanel({ stats }) {
       <h3 style={{ margin: "0 0 8px", fontSize: 15, color: "var(--fbo-gold)" }}>
         Today's Stats
       </h3>
-      {stats.total_players > 0 && (
+      {(stats.total_started > 0 || stats.total_players > 0) && (
         <>
-          <div style={{ display: "flex", gap: 24, fontSize: 13, marginBottom: 12 }}>
-            <span>{stats.total_players} player{stats.total_players !== 1 ? "s" : ""}</span>
-            <span>Avg: {stats.avg_guesses} guesses</span>
-            <span>Best: {stats.best_score}</span>
+          <div style={{ display: "flex", gap: 24, fontSize: 13, marginBottom: 12, flexWrap: "wrap" }}>
+            {stats.total_started > 0 && <span>{stats.total_started} started</span>}
+            <span>{stats.total_players} solved</span>
+            {stats.total_players > 0 && <span>Avg: {stats.avg_guesses} guesses</span>}
+            {stats.total_players > 0 && <span>Best: {stats.best_score}</span>}
           </div>
           {(stats.distribution || []).length > 0 && (
             <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }}>
