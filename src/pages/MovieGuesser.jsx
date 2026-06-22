@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useUser } from "../useUser";
-import { apiGuesserToday, apiGuesserGuess, apiGuesserSearch, apiGuesserComplete } from "../api";
+import { apiGuesserToday, apiGuesserGuess, apiGuesserSearch, apiGuesserComplete, apiGuesserRegenerate } from "../api";
 
 const STORAGE_KEY = "fbo_guesser_";
 const PLAYER_ID_KEY = "fbo_guesser_player_id";
@@ -644,19 +644,44 @@ export default function MovieGuesser() {
       <StatsPanel stats={stats} />
 
       {user?.is_admin && puzzle && (
-        <button onClick={() => {
-          localStorage.removeItem(STORAGE_KEY + puzzle.game_date);
-          setGuesses([]);
-          setWon(false);
-          setAnswer(null);
-          reportedRef.current = false;
-        }} style={{
-          marginTop: 16, padding: "6px 14px", borderRadius: 4, border: "1px solid var(--fbo-border)",
-          background: "var(--fbo-bg-panel)", color: "var(--fbo-text-muted)", fontSize: 12,
-          cursor: "pointer", display: "block", width: "100%",
-        }}>
-          Reset Today's Game (Admin)
-        </button>
+        <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+          <button onClick={() => {
+            localStorage.removeItem(STORAGE_KEY + puzzle.game_date);
+            setGuesses([]);
+            setWon(false);
+            setAnswer(null);
+            setStats(null);
+            reportedRef.current = false;
+          }} style={{
+            flex: 1, padding: "6px 14px", borderRadius: 4, border: "1px solid var(--fbo-border)",
+            background: "var(--fbo-bg-panel)", color: "var(--fbo-text-muted)", fontSize: 12,
+            cursor: "pointer",
+          }}>
+            Reset My Game (Admin)
+          </button>
+          <button onClick={async () => {
+            const res = await apiGuesserRegenerate();
+            if (!res.ok) return;
+            localStorage.removeItem(STORAGE_KEY + puzzle.game_date);
+            setGuesses([]);
+            setWon(false);
+            setAnswer(null);
+            setStats(null);
+            reportedRef.current = false;
+            setPuzzle({
+              ...puzzle,
+              release_date: res.data.release_date,
+              revenue: res.data.revenue,
+              title_length: res.data.title_length,
+            });
+          }} style={{
+            flex: 1, padding: "6px 14px", borderRadius: 4, border: "1px solid var(--fbo-border)",
+            background: "var(--fbo-bg-panel)", color: "var(--fbo-text-muted)", fontSize: 12,
+            cursor: "pointer",
+          }}>
+            New Puzzle (Admin)
+          </button>
+        </div>
       )}
     </div>
   );

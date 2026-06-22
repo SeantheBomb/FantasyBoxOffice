@@ -140,6 +140,8 @@ export const apiGuesserGuess = (tmdbId, title, playerId) =>
 export const apiGuesserSearch = (q) => jsonFetch(`/api/guesser/search?q=${encodeURIComponent(q)}`);
 export const apiGuesserComplete = (numGuesses, playerId) =>
   jsonFetch("/api/guesser/complete", { method: "POST", body: { num_guesses: numGuesses, player_id: playerId } });
+export const apiGuesserRegenerate = () =>
+  jsonFetch("/api/guesser/regenerate", { method: "POST", body: {} });
 
 // Betting / weekend predictions (public)
 export const apiBettingCurrent = () => jsonFetch("/api/betting/current");

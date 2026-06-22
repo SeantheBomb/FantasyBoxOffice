@@ -22,7 +22,7 @@ function dateToSeed(dateStr) {
 // Pick today's movie. Strategy: search a handful of prior years for movies
 // released in a ±3 day window around today's month/day. One discover call
 // per year-window keeps us well under Cloudflare's subrequest limit.
-export async function getOrCreateDailyMovie(db, token, gameDate) {
+export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
   const existing = await db
     .prepare("SELECT * FROM guesser_daily WHERE game_date = ?")
     .bind(gameDate)
@@ -74,7 +74,7 @@ export async function getOrCreateDailyMovie(db, token, gameDate) {
   });
   unique.sort((a, b) => a.id - b.id);
 
-  const rng = mulberry32(dateToSeed(gameDate));
+  const rng = mulberry32(dateToSeed(gameDate + salt));
   for (let i = unique.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
     [unique[i], unique[j]] = [unique[j], unique[i]];
