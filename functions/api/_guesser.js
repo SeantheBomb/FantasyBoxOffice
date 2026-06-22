@@ -96,7 +96,7 @@ export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
         tmdbFetch(`/movie/${c.id}`, token),
         tmdbFetch(`/movie/${c.id}/credits`, token),
       ]);
-      if (d.revenue && d.revenue > 0) {
+      if (d.revenue && d.revenue >= 10_000_000) {
         picked = c;
         detail = d;
         credits = cr;
