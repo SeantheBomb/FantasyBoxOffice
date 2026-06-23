@@ -62,12 +62,12 @@ function Countdown() {
 }
 
 function DirectionBadge({ label, value, direction }) {
-  if (!direction) return null;
+  if (!value || value === "0" || value === "0.0" || value === "?") return null;
   const arrow = direction === "close" ? "≈" : direction === "higher" || direction === "longer" ? "▲" : "▼";
   const cls = direction === "close" ? "mg-badge--close" : "mg-badge--direction";
   return (
     <span className={`mg-badge ${cls}`}>
-      {arrow} {label}: {value}
+      {direction ? `${arrow} ` : ""}{label}: {value}
     </span>
   );
 }

@@ -152,14 +152,14 @@ export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
 }
 
 function runtimeDirection(answerMin, guessMin) {
-  if (!answerMin || !guessMin) return null;
+  if (answerMin == null || guessMin == null || answerMin === 0 || guessMin === 0) return null;
   const diff = answerMin - guessMin;
   if (Math.abs(diff) <= 5) return "close";
   return diff > 0 ? "longer" : "shorter";
 }
 
 function scoreDirection(answerScore, guessScore) {
-  if (!answerScore || !guessScore) return null;
+  if (answerScore == null || guessScore == null || answerScore === 0 || guessScore === 0) return null;
   const diff = answerScore - guessScore;
   if (Math.abs(diff) <= 0.3) return "close";
   return diff > 0 ? "higher" : "lower";
