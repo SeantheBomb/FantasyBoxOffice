@@ -61,55 +61,14 @@ function Countdown() {
   return <span>{left}</span>;
 }
 
-function LetterClues({ revealedPositions, presentLetters, eliminatedLetters, won, answerTitle }) {
-  if (won && answerTitle) {
-    return (
-      <div style={{ textAlign: "center", marginBottom: 16 }}>
-        <div className="mg-letter-grid">
-          {answerTitle.split("").map((ch, i) => (
-            <span key={i} className="mg-letter mg-letter--won">{ch}</span>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  const hasAnyClues = revealedPositions.length > 0 || presentLetters.length > 0 || eliminatedLetters.length > 0;
-  if (!hasAnyClues) return null;
-
+function DirectionBadge({ label, value, direction }) {
+  if (!direction) return null;
+  const arrow = direction === "close" ? "≈" : direction === "higher" || direction === "longer" ? "▲" : "▼";
+  const cls = direction === "close" ? "mg-badge--close" : "mg-badge--direction";
   return (
-    <div className="mg-title-reveal">
-      {revealedPositions.length > 0 && (
-        <div className="mg-confirmed-positions">
-          {revealedPositions
-            .sort((a, b) => a.index - b.index)
-            .map((r) => (
-              <span key={r.index} className="mg-confirmed-pos">
-                <span className="mg-confirmed-pos-char">{r.char.toUpperCase()}</span>
-                <span className="mg-confirmed-pos-num">{r.index + 1}</span>
-              </span>
-            ))}
-        </div>
-      )}
-      <div className="mg-letter-lists">
-        {presentLetters.length > 0 && (
-          <div className="mg-letter-list">
-            <span className="mg-letter-list-label">In title:</span>
-            {presentLetters.sort().map((l) => (
-              <span key={l} className="mg-letter-present">{l.toUpperCase()}</span>
-            ))}
-          </div>
-        )}
-        {eliminatedLetters.length > 0 && (
-          <div className="mg-letter-list">
-            <span className="mg-letter-list-label">Not in title:</span>
-            {eliminatedLetters.sort().map((l) => (
-              <span key={l} className="mg-eliminated-letter">{l.toUpperCase()}</span>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+    <span className={`mg-badge ${cls}`}>
+      {arrow} {label}: {value}
+    </span>
   );
 }
 
@@ -134,6 +93,13 @@ function HintRow({ label, items, matchingSet }) {
   );
 }
 
+function fmtRuntime(min) {
+  if (!min) return "?";
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
 function GuessHints({ guess }) {
   const matchingGenres = new Set(guess.matching_genres || []);
   const matchingCompanies = new Set(guess.matching_companies || []);
@@ -143,6 +109,15 @@ function GuessHints({ guess }) {
       <HintRow label="Genre" items={guess.guessed_genres || []} matchingSet={matchingGenres} />
       <HintRow label="Studio" items={guess.guessed_companies || []} matchingSet={matchingCompanies} />
       <HintRow label="Cast" items={guess.guessed_cast || []} matchingSet={matchingCast} />
+      <div className="mg-hint-row">
+        <span className="mg-hint-label">Rating</span>
+        <HintBadge label={guess.mpa_rating || "NR"} match={guess.mpa_match} />
+      </div>
+      <div className="mg-hint-row">
+        <span className="mg-hint-label">More</span>
+        <DirectionBadge label="Runtime" value={fmtRuntime(guess.runtime)} direction={guess.runtime_direction} />
+        <DirectionBadge label="Score" value={guess.vote_average?.toFixed(1)} direction={guess.score_direction} />
+      </div>
     </div>
   );
 }
@@ -227,31 +202,6 @@ export default function MovieGuesser() {
   const searchTimeout = useRef(null);
   const dropdownRef = useRef(null);
   const inputRef = useRef(null);
-
-  const { revealedPositions, presentLetters, eliminatedLetters } = useMemo(() => {
-    const posMap = {};
-    const presentSet = new Set();
-    const elimSet = new Set();
-    for (const g of guesses) {
-      if (g.correct) continue;
-      for (const { index, char } of g.revealed_positions || []) {
-        posMap[index] = char;
-      }
-      for (const l of g.present_letters || []) {
-        presentSet.add(l);
-      }
-      for (const l of g.eliminated_letters || []) {
-        elimSet.add(l);
-      }
-    }
-    // Remove from present any letters that have been confirmed in a position
-    const confirmedLetters = new Set(Object.values(posMap).map((c) => c.toLowerCase()));
-    return {
-      revealedPositions: Object.entries(posMap).map(([i, c]) => ({ index: Number(i), char: c })),
-      presentLetters: [...presentSet].filter((l) => !confirmedLetters.has(l)),
-      eliminatedLetters: [...elimSet],
-    };
-  }, [guesses]);
 
   useEffect(() => {
     (async () => {
@@ -359,9 +309,12 @@ export default function MovieGuesser() {
       guessed_genres: res.data.guessed_genres || [],
       guessed_companies: res.data.guessed_companies || [],
       guessed_cast: res.data.guessed_cast || [],
-      revealed_positions: res.data.revealed_positions || [],
-      present_letters: res.data.present_letters || [],
-      eliminated_letters: res.data.eliminated_letters || [],
+      mpa_rating: res.data.mpa_rating || "NR",
+      mpa_match: res.data.mpa_match || false,
+      runtime: res.data.runtime || 0,
+      runtime_direction: res.data.runtime_direction,
+      vote_average: res.data.vote_average || 0,
+      score_direction: res.data.score_direction,
     };
 
     const newGuesses = [...guesses, guess];
@@ -448,15 +401,6 @@ export default function MovieGuesser() {
         <div className="mg-clue-label">Worldwide Revenue</div>
         <div className="mg-clue-revenue">{fmtRevenue(puzzle.revenue)}</div>
       </div>
-
-      {/* Letter clues */}
-      <LetterClues
-        revealedPositions={revealedPositions}
-        presentLetters={presentLetters}
-        eliminatedLetters={eliminatedLetters}
-        won={won}
-        answerTitle={answer?.title}
-      />
 
       {/* Win state */}
       {won && answer && (
@@ -546,8 +490,8 @@ export default function MovieGuesser() {
           <h3>How to Play</h3>
           <ul>
             <li>A movie was released near the date shown above — guess which one!</li>
-            <li>After each wrong guess, you'll see which <b>genres</b>, <b>studios</b>, or <b>actors</b> match</li>
-            <li>Letters in the right position get revealed, and eliminated letters are shown</li>
+            <li>After each wrong guess, you'll see which <b>genres</b>, <b>studios</b>, <b>actors</b>, and <b>rating</b> match</li>
+            <li><b>Runtime</b> and <b>user score</b> hints tell you if the answer is higher or lower</li>
             <li>Fewer guesses = better score. New puzzle every day at midnight</li>
           </ul>
         </div>

@@ -19,9 +19,20 @@ function dateToSeed(dateStr) {
   return h;
 }
 
-// Pick today's movie. Strategy: search a handful of prior years for movies
-// released in a ±3 day window around today's month/day. One discover call
-// per year-window keeps us well under Cloudflare's subrequest limit.
+// Extract US MPA rating (G, PG, PG-13, R, NR) from TMDB release_dates
+async function fetchMpaRating(tmdbId, token) {
+  try {
+    const rd = await tmdbFetch(`/movie/${tmdbId}/release_dates`, token);
+    const us = rd?.results?.find((r) => r.iso_3166_1 === "US");
+    const cert = us?.release_dates
+      ?.map((d) => d.certification)
+      .find((c) => c && c.length > 0);
+    return cert || "NR";
+  } catch {
+    return "NR";
+  }
+}
+
 export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
   const existing = await db
     .prepare("SELECT * FROM guesser_daily WHERE game_date = ?")
@@ -30,11 +41,8 @@ export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
   if (existing) return existing;
 
   const currentYear = parseInt(gameDate.slice(0, 4), 10);
-  const mmdd = gameDate.slice(5); // "MM-DD"
+  const mmdd = gameDate.slice(5);
 
-  // Build candidate pool: spread across decades so any era can appear.
-  // Each call covers a 7-day window (±3 days). Take up to 4 from each
-  // year so no single era dominates the pool.
   const candidates = [];
   const yearsToSearch = [
     currentYear - 1, currentYear - 3, currentYear - 5,
@@ -70,7 +78,6 @@ export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
 
   if (!candidates.length) return null;
 
-  // Deduplicate by tmdb_id, sort for stability, then shuffle deterministically
   const seen = new Set();
   const unique = candidates.filter((m) => {
     if (seen.has(m.id)) return false;
@@ -85,8 +92,6 @@ export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
     [unique[i], unique[j]] = [unique[j], unique[i]];
   }
 
-  // Try candidates until we find one with revenue data.
-  // Each attempt costs 2 subrequests (detail + credits).
   let picked = null;
   let detail = null;
   let credits = null;
@@ -111,9 +116,8 @@ export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
 
   const genres = (detail.genres || []).map((g) => g.name);
   const companies = (detail.production_companies || []).map((c) => c.name);
-  const topCast = (credits.cast || [])
-    .slice(0, 10)
-    .map((c) => c.name);
+  const topCast = (credits.cast || []).slice(0, 10).map((c) => c.name);
+  const mpaRating = await fetchMpaRating(picked.id, token);
 
   const row = {
     game_date: gameDate,
@@ -121,6 +125,9 @@ export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
     title: detail.title || picked.title,
     release_date: detail.release_date || picked.release_date,
     revenue: detail.revenue || picked.revenue || 0,
+    runtime: detail.runtime || 0,
+    vote_average: detail.vote_average || 0,
+    mpa_rating: mpaRating,
     genres: JSON.stringify(genres),
     production_companies: JSON.stringify(companies),
     top_cast: JSON.stringify(topCast),
@@ -129,52 +136,35 @@ export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
 
   await db
     .prepare(
-      `INSERT INTO guesser_daily (game_date, tmdb_id, title, release_date, revenue, genres, production_companies, top_cast, poster_url)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO guesser_daily
+       (game_date, tmdb_id, title, release_date, revenue, runtime, vote_average, mpa_rating, genres, production_companies, top_cast, poster_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(game_date) DO NOTHING`
     )
     .bind(
       row.game_date, row.tmdb_id, row.title, row.release_date,
-      row.revenue, row.genres, row.production_companies, row.top_cast, row.poster_url
+      row.revenue, row.runtime, row.vote_average, row.mpa_rating,
+      row.genres, row.production_companies, row.top_cast, row.poster_url
     )
     .run();
 
   return row;
 }
 
-// Wordle-style positional letter comparison. Only reveals letters that
-// are in the exact same position in both titles. Letters present in the
-// answer but in the wrong position go to a "present" list. Letters not
-// in the answer at all go to "eliminated."
-function compareLetters(answerTitle, guessTitle) {
-  const aLower = answerTitle.toLowerCase();
-  const gLower = guessTitle.toLowerCase();
-  const answerLetters = new Set(aLower.replace(/[^a-z]/g, "").split(""));
-
-  const revealed = [];
-  const presentSet = new Set();
-  const guessLettersSeen = new Set();
-
-  for (let i = 0; i < gLower.length; i++) {
-    const gc = gLower[i];
-    if (!/[a-z]/.test(gc)) continue;
-    guessLettersSeen.add(gc);
-    if (i < aLower.length && gc === aLower[i]) {
-      revealed.push({ index: i, char: answerTitle[i] });
-    } else if (answerLetters.has(gc)) {
-      presentSet.add(gc);
-    }
-  }
-
-  const eliminated = [...guessLettersSeen].filter((l) => !answerLetters.has(l));
-  const present = [...presentSet].filter(
-    (l) => !revealed.some((r) => r.char.toLowerCase() === l)
-  );
-
-  return { revealed, present, eliminated };
+function runtimeDirection(answerMin, guessMin) {
+  if (!answerMin || !guessMin) return null;
+  const diff = answerMin - guessMin;
+  if (Math.abs(diff) <= 5) return "close";
+  return diff > 0 ? "longer" : "shorter";
 }
 
-// Compare a guessed movie against the answer — returns detailed hints
+function scoreDirection(answerScore, guessScore) {
+  if (!answerScore || !guessScore) return null;
+  const diff = answerScore - guessScore;
+  if (Math.abs(diff) <= 0.3) return "close";
+  return diff > 0 ? "higher" : "lower";
+}
+
 export async function compareMovies(answer, guessedTmdbId, token) {
   const [detail, credits] = await Promise.all([
     tmdbFetch(`/movie/${guessedTmdbId}`, token),
@@ -193,7 +183,7 @@ export async function compareMovies(answer, guessedTmdbId, token) {
   const matchingCompanies = answerCompanies.filter((c) => guessCompanies.includes(c));
   const matchingCast = answerCast.filter((c) => guessCast.includes(c));
 
-  const letters = compareLetters(answer.title, detail.title);
+  const guessMpa = await fetchMpaRating(guessedTmdbId, token);
 
   return {
     title: detail.title,
@@ -208,14 +198,11 @@ export async function compareMovies(answer, guessedTmdbId, token) {
     guessed_genres: guessGenres,
     guessed_companies: guessCompanies,
     guessed_cast: guessCast,
-    revealed_positions: letters.revealed,
-    present_letters: letters.present,
-    eliminated_letters: letters.eliminated,
+    mpa_rating: guessMpa,
+    mpa_match: guessMpa === (answer.mpa_rating || "NR"),
+    runtime: detail.runtime || 0,
+    runtime_direction: runtimeDirection(answer.runtime, detail.runtime),
+    vote_average: detail.vote_average || 0,
+    score_direction: scoreDirection(answer.vote_average, detail.vote_average),
   };
-}
-
-export function formatRevenue(v) {
-  if (v >= 1e9) return "$" + (v / 1e9).toFixed(1) + "B";
-  if (v >= 1e6) return "$" + Math.round(v / 1e6) + "M";
-  return "$" + v.toLocaleString();
 }

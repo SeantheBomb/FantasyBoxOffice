@@ -90,10 +90,16 @@ async function bootstrapGuesserSchema(db) {
   for (const sql of stmts) {
     try { await db.prepare(sql).run(); } catch { /* already exists */ }
   }
-  // Add player_id column to completions if missing (existing table)
-  try {
-    await db.prepare(`ALTER TABLE guesser_completions ADD COLUMN player_id TEXT NOT NULL DEFAULT 'anonymous'`).run();
-  } catch { /* already exists */ }
+  // Self-healing column additions
+  const alters = [
+    `ALTER TABLE guesser_completions ADD COLUMN player_id TEXT NOT NULL DEFAULT 'anonymous'`,
+    `ALTER TABLE guesser_daily ADD COLUMN runtime INTEGER DEFAULT 0`,
+    `ALTER TABLE guesser_daily ADD COLUMN vote_average REAL DEFAULT 0`,
+    `ALTER TABLE guesser_daily ADD COLUMN mpa_rating TEXT DEFAULT 'NR'`,
+  ];
+  for (const sql of alters) {
+    try { await db.prepare(sql).run(); } catch { /* already exists */ }
+  }
   try {
     await db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_guesser_completions_player ON guesser_completions(game_date, player_id)`).run();
   } catch { /* already exists */ }
