@@ -347,15 +347,20 @@ export default function MovieGuesser() {
 
   async function handleShare() {
     const guessCount = guesses.length;
-    const hintsLine = guesses.map((g) => {
-      if (g.correct) return "🎬";
-      const genre = g.genre_match ? "🟩" : "🟥";
-      const company = g.company_match ? "🟩" : "🟥";
-      const cast = g.cast_match ? "🟩" : "🟥";
-      return `${genre}${company}${cast}`;
-    }).join("\n");
+    const tempLine = guesses.map((g) => {
+      if (g.correct) return "⭐";
+      let heat = 0;
+      if (g.genre_match) heat++;
+      if (g.company_match) heat++;
+      if (g.cast_match) heat++;
+      if (g.mpa_match) heat++;
+      if (g.runtime_direction === "close") heat++;
+      if (g.score_direction === "close") heat++;
+      return heat >= 2 ? "🟧" : "🟦";
+    }).join(" ");
 
-    const text = `🎬 FBO Movie Guesser ${puzzle.game_date}\n${guessCount} guess${guessCount !== 1 ? "es" : ""}\n\n${hintsLine}\n\nfantasyboxoffice.pages.dev/guesser`;
+    const [y] = puzzle.release_date.split("-");
+    const text = `🎬 Movie Guesser — ${fmtDate(puzzle.release_date).replace(/, \d+$/, `, ${y}`)}\n${tempLine}\n\n📅 ${y} · 💰 ${fmtRevenue(puzzle.revenue)}\n\nfantasyboxoffice.pages.dev/guesser`;
     try {
       await navigator.clipboard.writeText(text);
     } catch { /* fallback */ }
