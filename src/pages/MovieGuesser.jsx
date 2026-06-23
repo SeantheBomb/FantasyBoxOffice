@@ -61,7 +61,7 @@ function Countdown() {
   return <span>{left}</span>;
 }
 
-function TitleReveal({ titleLength, revealedPositions, eliminatedLetters, won, answerTitle }) {
+function LetterClues({ revealedPositions, presentLetters, eliminatedLetters, won, answerTitle }) {
   if (won && answerTitle) {
     return (
       <div style={{ textAlign: "center", marginBottom: 16 }}>
@@ -74,32 +74,41 @@ function TitleReveal({ titleLength, revealedPositions, eliminatedLetters, won, a
     );
   }
 
-  const revealed = {};
-  for (const { index, char } of revealedPositions) {
-    revealed[index] = char;
-  }
+  const hasAnyClues = revealedPositions.length > 0 || presentLetters.length > 0 || eliminatedLetters.length > 0;
+  if (!hasAnyClues) return null;
 
   return (
     <div className="mg-title-reveal">
-      <div className="mg-title-reveal-label">Title — {titleLength} characters</div>
-      <div className="mg-letter-grid">
-        {Array.from({ length: titleLength }, (_, i) => {
-          const ch = revealed[i];
-          return (
-            <span key={i} className={`mg-letter ${ch ? "mg-letter--revealed" : "mg-letter--blank"}`}>
-              {ch || "·"}
-            </span>
-          );
-        })}
-      </div>
-      {eliminatedLetters.length > 0 && (
-        <div className="mg-eliminated">
-          <span className="mg-eliminated-label">Eliminated:</span>
-          {eliminatedLetters.sort().map((l) => (
-            <span key={l} className="mg-eliminated-letter">{l.toUpperCase()}</span>
-          ))}
+      {revealedPositions.length > 0 && (
+        <div className="mg-confirmed-positions">
+          {revealedPositions
+            .sort((a, b) => a.index - b.index)
+            .map((r) => (
+              <span key={r.index} className="mg-confirmed-pos">
+                <span className="mg-confirmed-pos-char">{r.char.toUpperCase()}</span>
+                <span className="mg-confirmed-pos-num">{r.index + 1}</span>
+              </span>
+            ))}
         </div>
       )}
+      <div className="mg-letter-lists">
+        {presentLetters.length > 0 && (
+          <div className="mg-letter-list">
+            <span className="mg-letter-list-label">In title:</span>
+            {presentLetters.sort().map((l) => (
+              <span key={l} className="mg-letter-present">{l.toUpperCase()}</span>
+            ))}
+          </div>
+        )}
+        {eliminatedLetters.length > 0 && (
+          <div className="mg-letter-list">
+            <span className="mg-letter-list-label">Not in title:</span>
+            {eliminatedLetters.sort().map((l) => (
+              <span key={l} className="mg-eliminated-letter">{l.toUpperCase()}</span>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -219,20 +228,27 @@ export default function MovieGuesser() {
   const dropdownRef = useRef(null);
   const inputRef = useRef(null);
 
-  const { revealedPositions, eliminatedLetters } = useMemo(() => {
+  const { revealedPositions, presentLetters, eliminatedLetters } = useMemo(() => {
     const posMap = {};
+    const presentSet = new Set();
     const elimSet = new Set();
     for (const g of guesses) {
       if (g.correct) continue;
       for (const { index, char } of g.revealed_positions || []) {
         posMap[index] = char;
       }
+      for (const l of g.present_letters || []) {
+        presentSet.add(l);
+      }
       for (const l of g.eliminated_letters || []) {
         elimSet.add(l);
       }
     }
+    // Remove from present any letters that have been confirmed in a position
+    const confirmedLetters = new Set(Object.values(posMap).map((c) => c.toLowerCase()));
     return {
       revealedPositions: Object.entries(posMap).map(([i, c]) => ({ index: Number(i), char: c })),
+      presentLetters: [...presentSet].filter((l) => !confirmedLetters.has(l)),
       eliminatedLetters: [...elimSet],
     };
   }, [guesses]);
@@ -344,6 +360,7 @@ export default function MovieGuesser() {
       guessed_companies: res.data.guessed_companies || [],
       guessed_cast: res.data.guessed_cast || [],
       revealed_positions: res.data.revealed_positions || [],
+      present_letters: res.data.present_letters || [],
       eliminated_letters: res.data.eliminated_letters || [],
     };
 
@@ -432,16 +449,14 @@ export default function MovieGuesser() {
         <div className="mg-clue-revenue">{fmtRevenue(puzzle.revenue)}</div>
       </div>
 
-      {/* Hangman title reveal */}
-      {puzzle.title_length && (
-        <TitleReveal
-          titleLength={puzzle.title_length}
-          revealedPositions={revealedPositions}
-          eliminatedLetters={eliminatedLetters}
-          won={won}
-          answerTitle={answer?.title}
-        />
-      )}
+      {/* Letter clues */}
+      <LetterClues
+        revealedPositions={revealedPositions}
+        presentLetters={presentLetters}
+        eliminatedLetters={eliminatedLetters}
+        won={won}
+        answerTitle={answer?.title}
+      />
 
       {/* Win state */}
       {won && answer && (
@@ -553,7 +568,6 @@ export default function MovieGuesser() {
               ...puzzle,
               release_date: res.data.release_date,
               revenue: res.data.revenue,
-              title_length: res.data.title_length,
             });
           }} className="mg-admin-btn">
             New Puzzle

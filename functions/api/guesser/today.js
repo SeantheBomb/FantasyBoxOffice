@@ -43,7 +43,6 @@ export async function onRequestGet({ env }) {
     game_date: today,
     release_date: movie.release_date,
     revenue: movie.revenue,
-    title_length: movie.title.length,
     stats: {
       total_started: started?.total_started || 0,
       total_players: stats?.total_players || 0,

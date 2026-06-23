@@ -142,22 +142,36 @@ export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
   return row;
 }
 
-// Hangman-style letter reveals: any letter present in the guessed title
-// reveals ALL of its positions in the answer title.
+// Wordle-style positional letter comparison. Only reveals letters that
+// are in the exact same position in both titles. Letters present in the
+// answer but in the wrong position go to a "present" list. Letters not
+// in the answer at all go to "eliminated."
 function compareLetters(answerTitle, guessTitle) {
   const aLower = answerTitle.toLowerCase();
-  const guessLetters = new Set(guessTitle.toLowerCase().replace(/[^a-z]/g, "").split(""));
+  const gLower = guessTitle.toLowerCase();
   const answerLetters = new Set(aLower.replace(/[^a-z]/g, "").split(""));
 
   const revealed = [];
-  for (let i = 0; i < aLower.length; i++) {
-    if (guessLetters.has(aLower[i])) {
+  const presentSet = new Set();
+  const guessLettersSeen = new Set();
+
+  for (let i = 0; i < gLower.length; i++) {
+    const gc = gLower[i];
+    if (!/[a-z]/.test(gc)) continue;
+    guessLettersSeen.add(gc);
+    if (i < aLower.length && gc === aLower[i]) {
       revealed.push({ index: i, char: answerTitle[i] });
+    } else if (answerLetters.has(gc)) {
+      presentSet.add(gc);
     }
   }
 
-  const eliminated = [...guessLetters].filter((l) => !answerLetters.has(l));
-  return { revealed, eliminated };
+  const eliminated = [...guessLettersSeen].filter((l) => !answerLetters.has(l));
+  const present = [...presentSet].filter(
+    (l) => !revealed.some((r) => r.char.toLowerCase() === l)
+  );
+
+  return { revealed, present, eliminated };
 }
 
 // Compare a guessed movie against the answer — returns detailed hints
@@ -195,6 +209,7 @@ export async function compareMovies(answer, guessedTmdbId, token) {
     guessed_companies: guessCompanies,
     guessed_cast: guessCast,
     revealed_positions: letters.revealed,
+    present_letters: letters.present,
     eliminated_letters: letters.eliminated,
   };
 }
