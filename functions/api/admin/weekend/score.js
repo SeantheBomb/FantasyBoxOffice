@@ -44,8 +44,8 @@ export async function onRequestGet({ request, env }) {
                ORDER BY date DESC LIMIT 1) AS bom_gross
        FROM weekend_movies wm
        JOIN movies m ON m.tmdb_id = wm.tmdb_id
-       JOIN owned_movies om ON om.tmdb_id = wm.tmdb_id AND om.is_void = 0
-       JOIN users u ON u.id = om.owner_user_id
+       LEFT JOIN owned_movies om ON om.tmdb_id = wm.tmdb_id AND om.is_void = 0
+       LEFT JOIN users u ON u.id = om.owner_user_id
        LEFT JOIN weekend_results wr ON wr.tmdb_id = wm.tmdb_id AND wr.weekend_date = wm.weekend_date
        WHERE wm.weekend_date = ? ORDER BY m.title`
     )
