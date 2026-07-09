@@ -43,13 +43,16 @@ export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
   const currentYear = parseInt(gameDate.slice(0, 4), 10);
   const mmdd = gameDate.slice(5);
 
-  const candidates = [];
   const yearsToSearch = [
     currentYear - 1, currentYear - 3, currentYear - 5,
     currentYear - 8, currentYear - 12, currentYear - 18,
     currentYear - 25, currentYear - 35, currentYear - 45,
   ].filter((y) => y >= 1970);
 
+  const rng = mulberry32(dateToSeed(gameDate + salt));
+
+  // Collect up to 4 candidates per year, shuffle within each year
+  const perYear = [];
   for (const y of yearsToSearch) {
     const center = new Date(`${y}-${mmdd}T00:00:00Z`);
     const from = new Date(center.getTime() - 3 * 86400000).toISOString().slice(0, 10);
@@ -64,44 +67,55 @@ export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
         include_adult: false,
         page: 1,
       });
-      let added = 0;
-      for (const m of data.results || []) {
-        if (m.id && m.title && added < 4) {
-          candidates.push(m);
-          added++;
-        }
+      const yearCandidates = (data.results || []).filter((m) => m.id && m.title).slice(0, 4);
+      for (let i = yearCandidates.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [yearCandidates[i], yearCandidates[j]] = [yearCandidates[j], yearCandidates[i]];
       }
+      if (yearCandidates.length > 0) perYear.push(yearCandidates);
     } catch {
       // skip failed year
     }
   }
 
-  if (!candidates.length) return null;
+  if (!perYear.length) return null;
+
+  // Shuffle the year buckets so no era is systematically first
+  for (let i = perYear.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [perYear[i], perYear[j]] = [perYear[j], perYear[i]];
+  }
+
+  // Try order: one rep per era first, then remaining candidates
+  const tryOrder = [];
+  const remainders = [];
+  for (const bucket of perYear) {
+    tryOrder.push(bucket[0]);
+    for (let i = 1; i < bucket.length; i++) remainders.push(bucket[i]);
+  }
+  for (let i = remainders.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [remainders[i], remainders[j]] = [remainders[j], remainders[i]];
+  }
+  tryOrder.push(...remainders);
 
   const seen = new Set();
-  const unique = candidates.filter((m) => {
+  const toTry = tryOrder.filter((m) => {
     if (seen.has(m.id)) return false;
     seen.add(m.id);
     return true;
-  });
-  unique.sort((a, b) => a.id - b.id);
-
-  const rng = mulberry32(dateToSeed(gameDate + salt));
-  for (let i = unique.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [unique[i], unique[j]] = [unique[j], unique[i]];
-  }
+  }).slice(0, 15);
 
   let picked = null;
   let detail = null;
   let credits = null;
-  for (const c of unique.slice(0, 10)) {
+  for (const c of toTry) {
     try {
       const [d, cr] = await Promise.all([
         tmdbFetch(`/movie/${c.id}`, token),
         tmdbFetch(`/movie/${c.id}/credits`, token),
       ]);
-      if (d.revenue && d.revenue >= 10_000_000) {
+      if (d.revenue && d.revenue >= 100_000_000) {
         picked = c;
         detail = d;
         credits = cr;
