@@ -173,16 +173,19 @@ export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
   let picked = null;
   let detail = null;
   let credits = null;
+  let mpaRatingForPicked = "NR";
   for (const c of toTry) {
     try {
       const [d, cr] = await Promise.all([
         tmdbFetch(`/movie/${c.id}`, token),
         tmdbFetch(`/movie/${c.id}/credits`, token),
       ]);
-      if (d.revenue && d.revenue >= 100_000_000) {
+      const mpa = await fetchMpaRating(c.id, token);
+      if (d.revenue && d.revenue >= 100_000_000 && mpa !== "NR") {
         picked = c;
         detail = d;
         credits = cr;
+        mpaRatingForPicked = mpa;
         break;
       }
     } catch {
@@ -195,7 +198,7 @@ export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
   const genres = (detail.genres || []).map((g) => g.name);
   const companies = (detail.production_companies || []).map((c) => c.name);
   const topCast = (credits.cast || []).slice(0, 10).map((c) => c.name);
-  const mpaRating = await fetchMpaRating(picked.id, token);
+  const mpaRating = mpaRatingForPicked;
 
   const row = {
     game_date: gameDate,
