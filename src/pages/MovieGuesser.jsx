@@ -497,10 +497,11 @@ export default function MovieGuesser() {
                   onClick={() => submitGuess(m)}
                   onMouseEnter={() => setSelectedIdx(i)}
                   className={`mg-dropdown-item ${i === selectedIdx ? "mg-dropdown-item--selected" : ""}`}>
-                  {m.poster_url && (
-                    <img src={m.poster_url} alt="" className="mg-dropdown-poster" />
-                  )}
-                  <span className="mg-dropdown-title">{m.display}</span>
+                  {m.poster_url
+                    ? <img src={m.poster_url} alt={m.title} className="mg-dropdown-poster" />
+                    : <div className="mg-dropdown-poster mg-dropdown-poster--empty"><span>{m.title[0]}</span></div>
+                  }
+                  <span className="mg-dropdown-title">{m.title}</span>
                 </div>
               ))}
             </div>
