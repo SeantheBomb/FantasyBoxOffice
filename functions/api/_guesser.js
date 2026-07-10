@@ -1,5 +1,69 @@
 import { tmdbFetch, posterUrl } from "./_tmdb.js";
 
+const STOP_WORDS = new Set([
+  'i','me','my','myself','we','our','ours','ourselves','you','your','yours',
+  'yourself','yourselves','he','him','his','himself','she','her','hers',
+  'herself','it','its','itself','they','them','their','theirs','themselves',
+  'what','which','who','whom','this','that','these','those','am','is','are',
+  'was','were','be','been','being','have','has','had','having','do','does',
+  'did','doing','a','an','the','and','but','if','or','because','as','until',
+  'while','of','at','by','for','with','about','against','between','into',
+  'through','during','before','after','above','below','to','from','up','down',
+  'in','out','on','off','over','under','again','further','then','once','here',
+  'there','when','where','why','how','all','both','each','few','more','most',
+  'other','some','such','no','nor','not','only','own','same','so','than',
+  'too','very','just','will','would','could','should','may','might','shall',
+  'can','must','need','now','also','even','still','well','back','any','s','t',
+  'd','ll','m','re','ve','don','didn','doesn','isn','aren','wasn','weren',
+  'won','wouldn','couldn','shouldn','hasn','haven','hadn','ain',
+]);
+
+function stem(w) {
+  if (w.length <= 3) return w;
+  if (w.endsWith('ying') && w.length > 5) return w.slice(0, -4) + 'ie';
+  if (w.endsWith('ies') && w.length > 4) return w.slice(0, -3) + 'y';
+  if (w.endsWith('ied') && w.length > 4) return w.slice(0, -3) + 'y';
+  if (w.endsWith('ing') && w.length > 5) return w.slice(0, -3);
+  if (w.endsWith('ness') && w.length > 5) return w.slice(0, -4);
+  if (w.endsWith('ed') && w.length > 4) return w.slice(0, -2);
+  if (w.endsWith('er') && w.length > 4) return w.slice(0, -2);
+  if (w.endsWith('ly') && w.length > 4) return w.slice(0, -2);
+  if (w.endsWith('es') && w.length > 4) return w.slice(0, -2);
+  if (w.endsWith('s') && w.length > 3) return w.slice(0, -1);
+  if (w.endsWith('e') && w.length > 4) return w.slice(0, -1);
+  return w;
+}
+
+export function tokenizeOverview(text) {
+  const tokens = [];
+  let blankIdx = 0;
+  const regex = /([A-Za-z]+(?:'[A-Za-z]+)*)|([^A-Za-z]+)/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    if (match[1]) {
+      const word = match[1];
+      const clean = word.toLowerCase().replace(/'/g, '');
+      const isStop = STOP_WORDS.has(clean) || clean.length <= 2;
+      if (isStop) {
+        tokens.push({ text: word, blank: false });
+      } else {
+        tokens.push({ text: word, blank: true, i: blankIdx++, s: stem(clean) });
+      }
+    } else {
+      tokens.push({ sp: match[2] });
+    }
+  }
+  return tokens;
+}
+
+export function getRevealedTokens(answerOverview, guessOverview) {
+  const tokens = tokenizeOverview(answerOverview || '');
+  const blanks = tokens.filter(t => t.blank);
+  const guessWords = (guessOverview || '').toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/);
+  const guessStems = new Set(guessWords.filter(w => w.length > 2).map(stem));
+  return blanks.filter(t => guessStems.has(t.s)).map(t => ({ i: t.i, text: t.text }));
+}
+
 // Mulberry32 seeded PRNG — deterministic pick from date string
 function mulberry32(seed) {
   return function () {
@@ -146,19 +210,21 @@ export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
     production_companies: JSON.stringify(companies),
     top_cast: JSON.stringify(topCast),
     poster_url: posterUrl(detail.poster_path || picked.poster_path),
+    overview: detail.overview || '',
   };
 
   await db
     .prepare(
       `INSERT INTO guesser_daily
-       (game_date, tmdb_id, title, release_date, revenue, runtime, vote_average, mpa_rating, genres, production_companies, top_cast, poster_url)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       (game_date, tmdb_id, title, release_date, revenue, runtime, vote_average, mpa_rating, genres, production_companies, top_cast, poster_url, overview)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(game_date) DO NOTHING`
     )
     .bind(
       row.game_date, row.tmdb_id, row.title, row.release_date,
       row.revenue, row.runtime, row.vote_average, row.mpa_rating,
-      row.genres, row.production_companies, row.top_cast, row.poster_url
+      row.genres, row.production_companies, row.top_cast, row.poster_url,
+      row.overview
     )
     .run();
 
@@ -218,5 +284,6 @@ export async function compareMovies(answer, guessedTmdbId, token) {
     runtime_direction: runtimeDirection(answer.runtime, detail.runtime),
     vote_average: detail.vote_average || 0,
     score_direction: scoreDirection(answer.vote_average, detail.vote_average),
+    revealed: getRevealedTokens(answer.overview || '', detail.overview || ''),
   };
 }

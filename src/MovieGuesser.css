@@ -118,6 +118,33 @@
   letter-spacing: 0.02em;
 }
 
+/* ── Overview Mad Libs ── */
+.mg-overview-wrap {
+  border-top: 1px dashed var(--fbo-border);
+  margin-top: 14px;
+  padding-top: 4px;
+}
+.mg-overview {
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--fbo-text);
+  margin: 8px 0 0;
+  text-align: left;
+}
+.mg-blank {
+  display: inline-block;
+  color: var(--fbo-text-muted);
+  border-bottom: 1px dashed var(--fbo-border);
+  letter-spacing: 0.08em;
+  padding: 0 1px;
+  font-size: 12px;
+  vertical-align: baseline;
+}
+.mg-revealed-word {
+  color: var(--fbo-gold);
+  font-weight: 600;
+}
+
 /* ── Directional hint badges ── */
 .mg-badge--direction {
   background: none;

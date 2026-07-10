@@ -1,5 +1,5 @@
 import { json } from "../_auth.js";
-import { getOrCreateDailyMovie } from "../_guesser.js";
+import { getOrCreateDailyMovie, tokenizeOverview } from "../_guesser.js";
 
 export async function onRequestGet({ env }) {
   await bootstrapGuesserSchema(env.DB);
@@ -39,10 +39,19 @@ export async function onRequestGet({ env }) {
      GROUP BY guessed_tmdb_id ORDER BY times_guessed DESC`
   ).bind(today).all();
 
+  // Tokenize overview — send blanked tokens without their text (revealed via guesses)
+  const rawTokens = tokenizeOverview(movie.overview || '');
+  const overviewTokens = rawTokens.map(t => {
+    if (t.sp !== undefined) return { sp: t.sp };
+    if (t.blank) return { i: t.i };
+    return { text: t.text };
+  });
+
   return json({
     game_date: today,
     release_date: movie.release_date,
     revenue: movie.revenue,
+    overview_tokens: overviewTokens,
     stats: {
       total_started: started?.total_started || 0,
       total_players: stats?.total_players || 0,
@@ -96,6 +105,7 @@ async function bootstrapGuesserSchema(db) {
     `ALTER TABLE guesser_daily ADD COLUMN runtime INTEGER DEFAULT 0`,
     `ALTER TABLE guesser_daily ADD COLUMN vote_average REAL DEFAULT 0`,
     `ALTER TABLE guesser_daily ADD COLUMN mpa_rating TEXT DEFAULT 'NR'`,
+    `ALTER TABLE guesser_daily ADD COLUMN overview TEXT DEFAULT ''`,
   ];
   for (const sql of alters) {
     try { await db.prepare(sql).run(); } catch { /* already exists */ }

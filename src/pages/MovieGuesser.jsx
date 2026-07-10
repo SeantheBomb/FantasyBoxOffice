@@ -181,6 +181,21 @@ function formatSearchResults(results) {
   }));
 }
 
+function OverviewDisplay({ tokens, revealedMap }) {
+  if (!tokens || tokens.length === 0) return null;
+  return (
+    <p className="mg-overview">
+      {tokens.map((t, idx) => {
+        if (t.sp !== undefined) return <span key={idx}>{t.sp}</span>;
+        if (t.text !== undefined) return <span key={idx}>{t.text}</span>;
+        const revealed = revealedMap[t.i];
+        if (revealed) return <span key={idx} className="mg-revealed-word">{revealed}</span>;
+        return <span key={idx} className="mg-blank">_____</span>;
+      })}
+    </p>
+  );
+}
+
 export default function MovieGuesser() {
   const { user } = useUser();
   const [puzzle, setPuzzle] = useState(null);
@@ -190,6 +205,8 @@ export default function MovieGuesser() {
   const [won, setWon] = useState(false);
   const [answer, setAnswer] = useState(null);
   const [stats, setStats] = useState(null);
+  const [overviewTokens, setOverviewTokens] = useState([]);
+  const [revealedMap, setRevealedMap] = useState({});
   const reportedRef = useRef(false);
 
   const [query, setQuery] = useState("");
@@ -213,6 +230,7 @@ export default function MovieGuesser() {
       }
       setPuzzle(res.data);
       setStats(res.data.stats);
+      setOverviewTokens(res.data.overview_tokens || []);
 
       const saved = getStoredGame(res.data.game_date);
       if (saved) {
@@ -220,6 +238,14 @@ export default function MovieGuesser() {
         setWon(saved.won || false);
         setAnswer(saved.answer || null);
         reportedRef.current = saved.reported || false;
+        // Replay revealed words from stored guesses
+        const map = {};
+        for (const g of saved.guesses || []) {
+          for (const r of g.revealed || []) {
+            map[r.i] = r.text;
+          }
+        }
+        setRevealedMap(map);
       }
       setLoading(false);
     })();
@@ -294,6 +320,7 @@ export default function MovieGuesser() {
       return;
     }
 
+    const newRevealed = res.data.revealed || [];
     const guess = {
       tmdb_id: movie.tmdb_id,
       title: movie.title,
@@ -315,7 +342,16 @@ export default function MovieGuesser() {
       runtime_direction: res.data.runtime_direction,
       vote_average: res.data.vote_average || 0,
       score_direction: res.data.score_direction,
+      revealed: newRevealed,
     };
+
+    if (newRevealed.length) {
+      setRevealedMap(prev => {
+        const next = { ...prev };
+        for (const r of newRevealed) next[r.i] = r.text;
+        return next;
+      });
+    }
 
     const newGuesses = [...guesses, guess];
     setGuesses(newGuesses);
@@ -372,6 +408,7 @@ export default function MovieGuesser() {
     setWon(false);
     setAnswer(null);
     setStats(null);
+    setRevealedMap({});
     reportedRef.current = false;
   }
 
@@ -405,6 +442,12 @@ export default function MovieGuesser() {
         <div className="mg-clue-date">{fmtDate(puzzle.release_date)}</div>
         <div className="mg-clue-label">Worldwide Revenue</div>
         <div className="mg-clue-revenue">{fmtRevenue(puzzle.revenue)}</div>
+        {overviewTokens.length > 0 && (
+          <div className="mg-overview-wrap">
+            <div className="mg-clue-label" style={{ marginTop: 14 }}>Overview</div>
+            <OverviewDisplay tokens={overviewTokens} revealedMap={revealedMap} />
+          </div>
+        )}
       </div>
 
       {/* Win state */}
@@ -513,11 +556,7 @@ export default function MovieGuesser() {
             const res = await apiGuesserRegenerate();
             if (!res.ok) return;
             resetLocalState();
-            setPuzzle({
-              ...puzzle,
-              release_date: res.data.release_date,
-              revenue: res.data.revenue,
-            });
+            window.location.reload();
           }} className="mg-admin-btn">
             New Puzzle
           </button>
