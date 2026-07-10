@@ -181,15 +181,22 @@ function formatSearchResults(results) {
   }));
 }
 
-function OverviewDisplay({ tokens, revealedMap }) {
+function OverviewDisplay({ tokens, revealedMap, winRevealedMap, newlyRevealedIndices }) {
   if (!tokens || tokens.length === 0) return null;
   return (
     <p className="mg-overview">
       {tokens.map((t, idx) => {
         if (t.sp !== undefined) return <span key={idx}>{t.sp}</span>;
         if (t.text !== undefined) return <span key={idx}>{t.text}</span>;
-        const revealed = revealedMap[t.i];
-        if (revealed) return <span key={idx} className="mg-revealed-word">{revealed}</span>;
+        const earned = revealedMap[t.i];
+        if (earned) {
+          const isNew = newlyRevealedIndices?.has(t.i);
+          return <span key={idx} className={`mg-revealed-word${isNew ? " mg-revealed-word--new" : ""}`}>{earned}</span>;
+        }
+        const winText = winRevealedMap?.[t.i];
+        if (winText) {
+          return <span key={idx} className="mg-win-revealed-word" style={{ "--word-idx": t.i }}>{winText}</span>;
+        }
         return <span key={idx} className="mg-blank">_____</span>;
       })}
     </p>
@@ -207,6 +214,9 @@ export default function MovieGuesser() {
   const [stats, setStats] = useState(null);
   const [overviewTokens, setOverviewTokens] = useState([]);
   const [revealedMap, setRevealedMap] = useState({});
+  const [winRevealedMap, setWinRevealedMap] = useState({});
+  const [newlyRevealedIndices, setNewlyRevealedIndices] = useState(new Set());
+  const newlyRevealedTimer = useRef(null);
   const reportedRef = useRef(false);
 
   const [query, setQuery] = useState("");
@@ -238,14 +248,18 @@ export default function MovieGuesser() {
         setWon(saved.won || false);
         setAnswer(saved.answer || null);
         reportedRef.current = saved.reported || false;
-        // Replay revealed words from stored guesses
+        // Replay earned reveals from stored guesses
         const map = {};
         for (const g of saved.guesses || []) {
-          for (const r of g.revealed || []) {
-            map[r.i] = r.text;
-          }
+          for (const r of g.revealed || []) map[r.i] = r.text;
         }
         setRevealedMap(map);
+        // Restore win-filled words
+        if (saved.winRevealed) {
+          const wm = {};
+          for (const r of saved.winRevealed) wm[r.i] = r.text;
+          setWinRevealedMap(wm);
+        }
       }
       setLoading(false);
     })();
@@ -321,6 +335,10 @@ export default function MovieGuesser() {
     }
 
     const newRevealed = res.data.revealed || [];
+    // Build updated earned map synchronously so win-fill can subtract from it
+    const updatedRevealedMap = { ...revealedMap };
+    for (const r of newRevealed) updatedRevealedMap[r.i] = r.text;
+
     const guess = {
       tmdb_id: movie.tmdb_id,
       title: movie.title,
@@ -346,11 +364,10 @@ export default function MovieGuesser() {
     };
 
     if (newRevealed.length) {
-      setRevealedMap(prev => {
-        const next = { ...prev };
-        for (const r of newRevealed) next[r.i] = r.text;
-        return next;
-      });
+      setRevealedMap(updatedRevealedMap);
+      setNewlyRevealedIndices(new Set(newRevealed.map(r => r.i)));
+      clearTimeout(newlyRevealedTimer.current);
+      newlyRevealedTimer.current = setTimeout(() => setNewlyRevealedIndices(new Set()), 1200);
     }
 
     const newGuesses = [...guesses, guess];
@@ -369,12 +386,19 @@ export default function MovieGuesser() {
       };
       setAnswer(answerData);
 
+      // Fill remaining blanks with win-revealed words (different color)
+      const allBlanks = res.data.all_blanks || [];
+      const winFilled = allBlanks.filter(r => !(r.i in updatedRevealedMap));
+      const wm = {};
+      for (const r of winFilled) wm[r.i] = r.text;
+      setWinRevealedMap(wm);
+
       if (!reportedRef.current) {
         const completeRes = await apiGuesserComplete(newGuesses.length, playerId);
         if (completeRes.ok) setStats(completeRes.data.stats);
         reportedRef.current = true;
       }
-      storeGame(puzzle.game_date, { guesses: newGuesses, won: true, answer: answerData, reported: true });
+      storeGame(puzzle.game_date, { guesses: newGuesses, won: true, answer: answerData, reported: true, winRevealed: winFilled });
     } else {
       storeGame(puzzle.game_date, { guesses: newGuesses, won: false });
     }
@@ -409,6 +433,8 @@ export default function MovieGuesser() {
     setAnswer(null);
     setStats(null);
     setRevealedMap({});
+    setWinRevealedMap({});
+    setNewlyRevealedIndices(new Set());
     reportedRef.current = false;
   }
 
@@ -445,7 +471,7 @@ export default function MovieGuesser() {
         {overviewTokens.length > 0 && (
           <div className="mg-overview-wrap">
             <div className="mg-clue-label" style={{ marginTop: 14 }}>Overview</div>
-            <OverviewDisplay tokens={overviewTokens} revealedMap={revealedMap} />
+            <OverviewDisplay tokens={overviewTokens} revealedMap={revealedMap} winRevealedMap={winRevealedMap} newlyRevealedIndices={newlyRevealedIndices} />
           </div>
         )}
       </div>

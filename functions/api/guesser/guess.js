@@ -1,5 +1,5 @@
 import { json, badRequest } from "../_auth.js";
-import { getOrCreateDailyMovie, compareMovies } from "../_guesser.js";
+import { getOrCreateDailyMovie, compareMovies, tokenizeOverview } from "../_guesser.js";
 
 export async function onRequestPost({ request, env }) {
   const body = await request.json().catch(() => null);
@@ -25,8 +25,12 @@ export async function onRequestPost({ request, env }) {
   }
 
   if (guessedId === answer.tmdb_id) {
+    const allBlanks = tokenizeOverview(answer.overview || '')
+      .filter(t => t.blank)
+      .map(t => ({ i: t.i, text: t.text }));
     return json({
       correct: true,
+      all_blanks: allBlanks,
       title: answer.title,
       poster_url: answer.poster_url,
       release_date: answer.release_date,
