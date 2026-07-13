@@ -239,8 +239,9 @@ export async function refreshNewReleaseBudgets({ db, token }) {
   return { checked: results?.length || 0, updated };
 }
 
-// Roll movie status from unreleased → released (release_date <= today).
-// Does not flip to 'complete' here; that comes from the dailies job.
+// Roll movie statuses:
+//   unreleased → released  when release_date <= today
+//   released   → complete  when no new BOM data for 7+ days (movie out of theaters)
 export async function rollStatuses(db) {
   const today = new Date().toISOString().slice(0, 10);
   await db
@@ -250,4 +251,19 @@ export async function rollStatuses(db) {
     )
     .bind(today)
     .run();
+
+  // A released movie with no new BOM daily in 7+ days is out of theaters.
+  // Guard: must have been released 8+ days ago and have at least one daily
+  // record (so we know scraping worked at some point).
+  const { meta } = await db
+    .prepare(
+      `UPDATE movies SET status = 'complete'
+         WHERE status = 'released'
+           AND release_date <= date('now', '-8 days')
+           AND EXISTS (SELECT 1 FROM dailies WHERE tmdb_id = movies.tmdb_id)
+           AND (SELECT MAX(date) FROM dailies WHERE tmdb_id = movies.tmdb_id) < date('now', '-7 days')`
+    )
+    .run();
+
+  return { markedComplete: meta?.changes || 0 };
 }

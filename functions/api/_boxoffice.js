@@ -6,7 +6,7 @@
 // where tt1234567 is the IMDb ID. TMDB exposes imdb_id on /movie/{id}, so
 // discoverBomSlug() grabs it.
 
-import { tmdbFetch } from "./_tmdb";
+import { tmdbFetch, rollStatuses } from "./_tmdb";
 
 const UA =
   "Mozilla/5.0 (compatible; FantasyBoxOfficeBot/1.0; +https://fantasyboxoffice.pages.dev)";
@@ -276,7 +276,9 @@ export async function refreshDailies({ db, token }) {
     // Polite pacing between fetches.
     await sleep(1000);
   }
-  return { updated, noData, failed, checked: results?.length || 0, failures: failures.slice(0, 5) };
+
+  const { markedComplete } = await rollStatuses(db);
+  return { updated, noData, failed, checked: results?.length || 0, failures: failures.slice(0, 5), markedComplete };
 }
 
 function sleep(ms) {
