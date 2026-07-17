@@ -83,14 +83,12 @@ function dateToSeed(dateStr) {
   return h;
 }
 
-// Extract US MPA rating (G, PG, PG-13, R, NR) from TMDB release_dates
+
 async function fetchMpaRating(tmdbId, token) {
   try {
     const rd = await tmdbFetch(`/movie/${tmdbId}/release_dates`, token);
     const us = rd?.results?.find((r) => r.iso_3166_1 === "US");
-    const cert = us?.release_dates
-      ?.map((d) => d.certification)
-      .find((c) => c && c.length > 0);
+    const cert = us?.release_dates?.map((d) => d.certification).find((c) => c?.length > 0);
     return cert || "NR";
   } catch {
     return "NR";
@@ -164,11 +162,12 @@ export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
   tryOrder.push(...remainders);
 
   const seen = new Set();
+  // Cap at 10 candidates: 9 discovers + 10*2 + 1 credits = 30 subrequests max (free tier: 50)
   const toTry = tryOrder.filter((m) => {
     if (seen.has(m.id)) return false;
     seen.add(m.id);
     return true;
-  }).slice(0, 15);
+  }).slice(0, 10);
 
   let picked = null;
   let detail = null;
@@ -176,12 +175,15 @@ export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
   let mpaRatingForPicked = "NR";
   for (const c of toTry) {
     try {
-      const [d, cr] = await Promise.all([
+      // Fetch detail + release_dates together; defer credits until we have a winner
+      const [d, rd] = await Promise.all([
         tmdbFetch(`/movie/${c.id}`, token),
-        tmdbFetch(`/movie/${c.id}/credits`, token),
+        tmdbFetch(`/movie/${c.id}/release_dates`, token),
       ]);
-      const mpa = await fetchMpaRating(c.id, token);
+      const us = rd?.results?.find((r) => r.iso_3166_1 === "US");
+      const mpa = us?.release_dates?.map((r) => r.certification).find((c) => c?.length > 0) || "NR";
       if (d.revenue && d.revenue >= 100_000_000 && mpa !== "NR") {
+        const cr = await tmdbFetch(`/movie/${c.id}/credits`, token);
         picked = c;
         detail = d;
         credits = cr;
