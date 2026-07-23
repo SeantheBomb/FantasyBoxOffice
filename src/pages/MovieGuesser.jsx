@@ -57,16 +57,15 @@ function strToSeed(s) {
   return h;
 }
 
-// Accumulate hard constraints from wrong guesses. Only guess-uncovered
-// metadata filters the wall — never date, revenue, or overview words.
+// Accumulate hard constraints from wrong guesses. Only categorical
+// facts (genre/studio/cast/rating) filter the wall — runtime and score
+// arrows stay soft hints, and date/revenue/overview never filter.
 function buildConstraints(guesses) {
   const c = {
     requiredGenres: new Set(), excludedGenres: new Set(),
     requiredCompanies: new Set(), excludedCompanies: new Set(),
     requiredCast: new Set(), excludedCast: new Set(),
     requiredMpa: null, excludedMpa: new Set(),
-    runtimeMin: -Infinity, runtimeMax: Infinity,
-    scoreMin: -Infinity, scoreMax: Infinity,
     guessedIds: new Set(),
   };
   for (const g of guesses) {
@@ -88,22 +87,6 @@ function buildConstraints(guesses) {
       if (g.mpa_match) c.requiredMpa = g.mpa_rating;
       else c.excludedMpa.add(g.mpa_rating);
     }
-    if (g.runtime && g.runtime_direction) {
-      if (g.runtime_direction === "longer") c.runtimeMin = Math.max(c.runtimeMin, g.runtime + 6);
-      else if (g.runtime_direction === "shorter") c.runtimeMax = Math.min(c.runtimeMax, g.runtime - 6);
-      else {
-        c.runtimeMin = Math.max(c.runtimeMin, g.runtime - 5);
-        c.runtimeMax = Math.min(c.runtimeMax, g.runtime + 5);
-      }
-    }
-    if (g.vote_average && g.score_direction) {
-      if (g.score_direction === "higher") c.scoreMin = Math.max(c.scoreMin, g.vote_average + 0.3);
-      else if (g.score_direction === "lower") c.scoreMax = Math.min(c.scoreMax, g.vote_average - 0.3);
-      else {
-        c.scoreMin = Math.max(c.scoreMin, g.vote_average - 0.301);
-        c.scoreMax = Math.min(c.scoreMax, g.vote_average + 0.301);
-      }
-    }
   }
   return c;
 }
@@ -121,12 +104,6 @@ function movieMatches(m, c) {
     if (c.excludedMpa.has(m.mpa)) return false;
   } else if (c.requiredMpa) {
     return false;
-  }
-  if (m.runtime) {
-    if (m.runtime < c.runtimeMin || m.runtime > c.runtimeMax) return false;
-  }
-  if (m.score) {
-    if (m.score < c.scoreMin - 0.001 || m.score > c.scoreMax + 0.001) return false;
   }
   return true;
 }
@@ -387,6 +364,8 @@ export default function MovieGuesser() {
     if (guesses.some((g) => g.tmdb_id === movie.tmdb_id)) return;
 
     setSubmitting(true);
+    setQuery("");
+    setPage(0);
 
     const playerId = getPlayerId();
     const res = await apiGuesserGuess(movie.tmdb_id, movie.title, playerId);
