@@ -189,6 +189,7 @@ function GuessHints({ guess }) {
         <span className="mg-hint-label">More</span>
         <DirectionBadge label="Runtime" value={fmtRuntime(guess.runtime)} direction={guess.runtime_direction} />
         <DirectionBadge label="Score" value={guess.vote_average?.toFixed(1)} direction={guess.score_direction} />
+        <DirectionBadge label="Revenue" value={guess.revenue ? fmtRevenue(guess.revenue) : null} direction={guess.revenue_direction} />
       </div>
     </div>
   );
@@ -398,6 +399,8 @@ export default function MovieGuesser() {
       runtime_direction: res.data.runtime_direction,
       vote_average: res.data.vote_average || 0,
       score_direction: res.data.score_direction,
+      revenue: res.data.revenue || 0,
+      revenue_direction: res.data.revenue_direction,
       revealed: newRevealed,
     };
 

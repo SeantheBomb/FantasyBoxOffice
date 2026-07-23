@@ -167,6 +167,13 @@ function scoreDirection(answerScore, guessScore) {
   return diff > 0 ? "higher" : "lower";
 }
 
+function revenueDirection(answerRevenue, guessRevenue) {
+  if (!answerRevenue || !guessRevenue) return null;
+  const ratio = answerRevenue / guessRevenue;
+  if (ratio >= 0.85 && ratio <= 1.15) return "close";
+  return ratio > 1 ? "higher" : "lower";
+}
+
 async function fetchMpaRating(tmdbId, token) {
   try {
     const rd = await tmdbFetch(`/movie/${tmdbId}/release_dates`, token);
@@ -198,6 +205,7 @@ export async function compareMovies(answer, guessedTmdbId, token, db) {
         mpa: poolRow.mpa_rating || "NR",
         runtime: poolRow.runtime || 0,
         vote_average: poolRow.vote_average || 0,
+        revenue: poolRow.revenue || 0,
         overview: poolRow.overview || '',
       };
     }
@@ -217,6 +225,7 @@ export async function compareMovies(answer, guessedTmdbId, token, db) {
       mpa: await fetchMpaRating(guessedTmdbId, token),
       runtime: detail.runtime || 0,
       vote_average: detail.vote_average || 0,
+      revenue: detail.revenue || 0,
       overview: detail.overview || '',
     };
   }
@@ -248,6 +257,8 @@ export async function compareMovies(answer, guessedTmdbId, token, db) {
     runtime_direction: runtimeDirection(answer.runtime, guess.runtime),
     vote_average: guess.vote_average,
     score_direction: scoreDirection(answer.vote_average, guess.vote_average),
+    revenue: guess.revenue,
+    revenue_direction: revenueDirection(answer.revenue, guess.revenue),
     revealed: getRevealedTokens(answer.overview || '', guess.overview || ''),
   };
 }
