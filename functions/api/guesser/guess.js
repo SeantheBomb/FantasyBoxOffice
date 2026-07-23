@@ -43,7 +43,7 @@ export async function onRequestPost({ request, env }) {
 
   // Wrong guess — compare and return hints
   try {
-    const hints = await compareMovies(answer, guessedId, token);
+    const hints = await compareMovies(answer, guessedId, token, env.DB);
     return json({ correct: false, ...hints });
   } catch {
     return json({ error: "Could not fetch movie details" }, { status: 500 });

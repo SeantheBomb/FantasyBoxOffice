@@ -14,6 +14,7 @@ import { postAuctionSettled, postAuctionClosingSoon } from "../../functions/api/
 import { bootstrapSchema } from "../../functions/api/_schema.js";
 import { runStandingsPost } from "./standings-job.js";
 import { runLastCallPost } from "./last-call-job.js";
+import { runSeedPoolChunk } from "./seed-pool-job.js";
 
 const SEASON_FROM = "2026-01-01";
 const SEASON_TO = "2026-12-31";
@@ -56,6 +57,14 @@ export default {
       ctx.waitUntil(runStandingsPost(env));
     } else if (job === "lastcall") {
       ctx.waitUntil(runLastCallPost(env));
+    } else if (job === "seed-pool") {
+      const year = parseInt(url.searchParams.get("year"), 10);
+      const offset = parseInt(url.searchParams.get("offset") || "0", 10);
+      if (!year) return new Response("year required", { status: 400 });
+      const result = await runSeedPoolChunk(env, year, offset);
+      return new Response(JSON.stringify(result), {
+        headers: { "Content-Type": "application/json" },
+      });
     } else {
       return new Response("job must be movies|dailies|settle|standings|standings-full|lastcall", { status: 400 });
     }

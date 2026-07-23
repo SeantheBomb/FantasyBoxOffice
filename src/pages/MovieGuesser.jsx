@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useUser } from "../useUser";
-import { apiGuesserToday, apiGuesserGuess, apiGuesserSearch, apiGuesserComplete, apiGuesserRegenerate } from "../api";
+import { apiGuesserToday, apiGuesserPool, apiGuesserGuess, apiGuesserComplete, apiGuesserRegenerate } from "../api";
 import "../MovieGuesser.css";
 
 const STORAGE_KEY = "fbo_guesser_";
 const PLAYER_ID_KEY = "fbo_guesser_player_id";
+const PAGE_SIZE = 60;
 
 function getPlayerId() {
   let id = localStorage.getItem(PLAYER_ID_KEY);
@@ -38,6 +39,100 @@ function fmtDate(iso) {
   const [y, m, d] = iso.split("-");
   const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   return `${months[Number(m) - 1]} ${Number(d)}, ${y}`;
+}
+
+function mulberry32(seed) {
+  return function () {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function strToSeed(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  return h;
+}
+
+// Accumulate hard constraints from wrong guesses. Only guess-uncovered
+// metadata filters the wall — never date, revenue, or overview words.
+function buildConstraints(guesses) {
+  const c = {
+    requiredGenres: new Set(), excludedGenres: new Set(),
+    requiredCompanies: new Set(), excludedCompanies: new Set(),
+    requiredCast: new Set(), excludedCast: new Set(),
+    requiredMpa: null, excludedMpa: new Set(),
+    runtimeMin: -Infinity, runtimeMax: Infinity,
+    scoreMin: -Infinity, scoreMax: Infinity,
+    guessedIds: new Set(),
+  };
+  for (const g of guesses) {
+    if (g.correct) continue;
+    c.guessedIds.add(g.tmdb_id);
+    for (const genre of g.guessed_genres || []) {
+      if ((g.matching_genres || []).includes(genre)) c.requiredGenres.add(genre);
+      else c.excludedGenres.add(genre);
+    }
+    for (const co of g.guessed_companies || []) {
+      if ((g.matching_companies || []).includes(co)) c.requiredCompanies.add(co);
+      else c.excludedCompanies.add(co);
+    }
+    for (const actor of g.guessed_cast || []) {
+      if ((g.matching_cast || []).includes(actor)) c.requiredCast.add(actor);
+      else c.excludedCast.add(actor);
+    }
+    if (g.mpa_rating && g.mpa_rating !== "NR") {
+      if (g.mpa_match) c.requiredMpa = g.mpa_rating;
+      else c.excludedMpa.add(g.mpa_rating);
+    }
+    if (g.runtime && g.runtime_direction) {
+      if (g.runtime_direction === "longer") c.runtimeMin = Math.max(c.runtimeMin, g.runtime + 6);
+      else if (g.runtime_direction === "shorter") c.runtimeMax = Math.min(c.runtimeMax, g.runtime - 6);
+      else {
+        c.runtimeMin = Math.max(c.runtimeMin, g.runtime - 5);
+        c.runtimeMax = Math.min(c.runtimeMax, g.runtime + 5);
+      }
+    }
+    if (g.vote_average && g.score_direction) {
+      if (g.score_direction === "higher") c.scoreMin = Math.max(c.scoreMin, g.vote_average + 0.3);
+      else if (g.score_direction === "lower") c.scoreMax = Math.min(c.scoreMax, g.vote_average - 0.3);
+      else {
+        c.scoreMin = Math.max(c.scoreMin, g.vote_average - 0.301);
+        c.scoreMax = Math.min(c.scoreMax, g.vote_average + 0.301);
+      }
+    }
+  }
+  return c;
+}
+
+function movieMatches(m, c) {
+  if (c.guessedIds.has(m.tmdb_id)) return false;
+  for (const g of c.requiredGenres) if (!m.genres.includes(g)) return false;
+  for (const g of m.genres) if (c.excludedGenres.has(g)) return false;
+  for (const co of c.requiredCompanies) if (!m.companies.includes(co)) return false;
+  for (const co of m.companies) if (c.excludedCompanies.has(co)) return false;
+  for (const a of c.requiredCast) if (!m.cast.includes(a)) return false;
+  for (const a of m.cast) if (c.excludedCast.has(a)) return false;
+  if (m.mpa && m.mpa !== "NR") {
+    if (c.requiredMpa && m.mpa !== c.requiredMpa) return false;
+    if (c.excludedMpa.has(m.mpa)) return false;
+  } else if (c.requiredMpa) {
+    return false;
+  }
+  if (m.runtime) {
+    if (m.runtime < c.runtimeMin || m.runtime > c.runtimeMax) return false;
+  }
+  if (m.score) {
+    if (m.score < c.scoreMin - 0.001 || m.score > c.scoreMax + 0.001) return false;
+  }
+  return true;
+}
+
+function tileUrl(posterUrl) {
+  return posterUrl ? posterUrl.replace("/w342", "/w185") : null;
 }
 
 function Countdown() {
@@ -170,17 +265,6 @@ function StatsPanel({ stats }) {
   );
 }
 
-function formatSearchResults(results) {
-  const titleCounts = {};
-  for (const r of results) {
-    titleCounts[r.title] = (titleCounts[r.title] || 0) + 1;
-  }
-  return results.map((r) => ({
-    ...r,
-    display: titleCounts[r.title] > 1 ? `${r.title} (${r.release_year || "?"})` : r.title,
-  }));
-}
-
 function OverviewDisplay({ tokens, revealedMap, winRevealedMap, newlyRevealedIndices }) {
   if (!tokens || tokens.length === 0) return null;
   return (
@@ -219,42 +303,42 @@ export default function MovieGuesser() {
   const newlyRevealedTimer = useRef(null);
   const reportedRef = useRef(false);
 
+  const [pool, setPool] = useState([]);
+  const [poolError, setPoolError] = useState(false);
   const [query, setQuery] = useState("");
-  const [searchResults, setSearchResults] = useState([]);
-  const [searching, setSearching] = useState(false);
-  const [showDropdown, setShowDropdown] = useState(false);
+  const [page, setPage] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [selectedIdx, setSelectedIdx] = useState(-1);
-
-  const searchTimeout = useRef(null);
-  const dropdownRef = useRef(null);
-  const inputRef = useRef(null);
+  const [dyingIds, setDyingIds] = useState(new Set());
+  const dyingTimer = useRef(null);
 
   useEffect(() => {
     (async () => {
-      const res = await apiGuesserToday();
-      if (!res.ok) {
-        setError(res.data?.error || "Failed to load puzzle");
+      const [todayRes, poolRes] = await Promise.all([apiGuesserToday(), apiGuesserPool()]);
+      if (!todayRes.ok) {
+        setError(todayRes.data?.error || "Failed to load puzzle");
         setLoading(false);
         return;
       }
-      setPuzzle(res.data);
-      setStats(res.data.stats);
-      setOverviewTokens(res.data.overview_tokens || []);
+      setPuzzle(todayRes.data);
+      setStats(todayRes.data.stats);
+      setOverviewTokens(todayRes.data.overview_tokens || []);
+      if (poolRes.ok && poolRes.data.movies?.length) {
+        setPool(poolRes.data.movies);
+      } else {
+        setPoolError(true);
+      }
 
-      const saved = getStoredGame(res.data.game_date);
+      const saved = getStoredGame(todayRes.data.game_date);
       if (saved) {
         setGuesses(saved.guesses || []);
         setWon(saved.won || false);
         setAnswer(saved.answer || null);
         reportedRef.current = saved.reported || false;
-        // Replay earned reveals from stored guesses
         const map = {};
         for (const g of saved.guesses || []) {
           for (const r of g.revealed || []) map[r.i] = r.text;
         }
         setRevealedMap(map);
-        // Restore win-filled words
         if (saved.winRevealed) {
           const wm = {};
           for (const r of saved.winRevealed) wm[r.i] = r.text;
@@ -265,67 +349,44 @@ export default function MovieGuesser() {
     })();
   }, []);
 
-  useEffect(() => {
-    function handleClick(e) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setShowDropdown(false);
-      }
+  // Random wall order — seeded per player+day so pagination is stable across reloads
+  const shuffledPool = useMemo(() => {
+    if (!pool.length || !puzzle) return [];
+    const rng = mulberry32(strToSeed(getPlayerId() + puzzle.game_date));
+    const arr = [...pool];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
     }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
+    return arr;
+  }, [pool, puzzle]);
 
-  const doSearch = useCallback(async (q) => {
-    if (q.length < 2) { setSearchResults([]); return; }
-    setSearching(true);
-    const res = await apiGuesserSearch(q);
-    if (res.ok) setSearchResults(res.data.results || []);
-    setSearching(false);
-  }, []);
+  const constraints = useMemo(() => buildConstraints(guesses), [guesses]);
 
-  const formattedResults = useMemo(() => formatSearchResults(searchResults), [searchResults]);
+  const visibleWall = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return shuffledPool.filter((m) => {
+      const alive = movieMatches(m, constraints) || dyingIds.has(m.tmdb_id);
+      if (!alive) return false;
+      if (q && !m.title.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [shuffledPool, constraints, dyingIds, query]);
 
-  function handleInputChange(e) {
-    const val = e.target.value;
-    setQuery(val);
-    setSelectedIdx(-1);
-    setShowDropdown(true);
-    clearTimeout(searchTimeout.current);
-    searchTimeout.current = setTimeout(() => doSearch(val), 300);
-  }
+  const remainingCount = useMemo(
+    () => shuffledPool.filter((m) => movieMatches(m, constraints)).length,
+    [shuffledPool, constraints]
+  );
 
-  function handleKeyDown(e) {
-    if (!showDropdown || !formattedResults.length) {
-      if (e.key === "Enter") e.preventDefault();
-      return;
-    }
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setSelectedIdx((prev) => Math.min(prev + 1, formattedResults.length - 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setSelectedIdx((prev) => Math.max(prev - 1, 0));
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      if (selectedIdx >= 0 && selectedIdx < formattedResults.length) {
-        submitGuess(formattedResults[selectedIdx]);
-      }
-    } else if (e.key === "Escape") {
-      setShowDropdown(false);
-    }
-  }
+  const pageCount = Math.max(1, Math.ceil(visibleWall.length / PAGE_SIZE));
+  const clampedPage = Math.min(page, pageCount - 1);
+  const pageTiles = visibleWall.slice(clampedPage * PAGE_SIZE, (clampedPage + 1) * PAGE_SIZE);
 
   async function submitGuess(movie) {
     if (won || submitting) return;
-    if (guesses.some((g) => g.tmdb_id === movie.tmdb_id)) {
-      setQuery("");
-      setShowDropdown(false);
-      return;
-    }
+    if (guesses.some((g) => g.tmdb_id === movie.tmdb_id)) return;
 
     setSubmitting(true);
-    setShowDropdown(false);
-    setQuery("");
 
     const playerId = getPlayerId();
     const res = await apiGuesserGuess(movie.tmdb_id, movie.title, playerId);
@@ -335,14 +396,12 @@ export default function MovieGuesser() {
     }
 
     const newRevealed = res.data.revealed || [];
-    // Build updated earned map synchronously so win-fill can subtract from it
     const updatedRevealedMap = { ...revealedMap };
     for (const r of newRevealed) updatedRevealedMap[r.i] = r.text;
 
     const guess = {
       tmdb_id: movie.tmdb_id,
       title: movie.title,
-      release_year: movie.release_year,
       poster_url: movie.poster_url,
       correct: res.data.correct,
       genre_match: res.data.genre_match,
@@ -371,6 +430,23 @@ export default function MovieGuesser() {
     }
 
     const newGuesses = [...guesses, guess];
+
+    if (!res.data.correct) {
+      // Knock-away juice: tiles alive under old constraints but dead under new
+      const oldC = constraints;
+      const newC = buildConstraints(newGuesses);
+      const dying = new Set(
+        shuffledPool
+          .filter((m) => movieMatches(m, oldC) && !movieMatches(m, newC))
+          .map((m) => m.tmdb_id)
+      );
+      if (dying.size) {
+        setDyingIds(dying);
+        clearTimeout(dyingTimer.current);
+        dyingTimer.current = setTimeout(() => setDyingIds(new Set()), 700);
+      }
+    }
+
     setGuesses(newGuesses);
 
     if (res.data.correct) {
@@ -386,7 +462,6 @@ export default function MovieGuesser() {
       };
       setAnswer(answerData);
 
-      // Fill remaining blanks with win-revealed words (different color)
       const allBlanks = res.data.all_blanks || [];
       const winFilled = allBlanks.filter(r => !(r.i in updatedRevealedMap));
       const wm = {};
@@ -406,7 +481,6 @@ export default function MovieGuesser() {
   }
 
   async function handleShare() {
-    const guessCount = guesses.length;
     const tempLine = guesses.map((g) => {
       if (g.correct) return "⭐";
       let heat = 0;
@@ -435,6 +509,9 @@ export default function MovieGuesser() {
     setRevealedMap({});
     setWinRevealedMap({});
     setNewlyRevealedIndices(new Set());
+    setDyingIds(new Set());
+    setPage(0);
+    setQuery("");
     reportedRef.current = false;
   }
 
@@ -455,11 +532,11 @@ export default function MovieGuesser() {
   }
 
   return (
-    <div className="mg-page">
+    <div className="mg-page mg-page--wall">
       {/* Marquee header */}
       <div className="mg-marquee">
         <h1 className="mg-title">Movie Guesser</h1>
-        <p className="mg-subtitle">Guess the movie from its release date and revenue</p>
+        <p className="mg-subtitle">Find today's movie on the wall</p>
       </div>
 
       {/* Now Showing clue card */}
@@ -502,38 +579,68 @@ export default function MovieGuesser() {
         </div>
       )}
 
-      {/* Search input */}
+      {/* The wall */}
       {!won && (
-        <div ref={dropdownRef} className="mg-search-wrap">
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            onFocus={() => formattedResults.length && setShowDropdown(true)}
-            placeholder="Search for a movie to submit a guess"
-            disabled={submitting}
-            className="mg-search-input"
-          />
-          {showDropdown && formattedResults.length > 0 && (
-            <div className="mg-dropdown">
-              {formattedResults.map((m, i) => (
-                <div key={m.tmdb_id}
-                  onClick={() => submitGuess(m)}
-                  onMouseEnter={() => setSelectedIdx(i)}
-                  className={`mg-dropdown-item ${i === selectedIdx ? "mg-dropdown-item--selected" : ""}`}>
-                  {m.poster_url
-                    ? <img src={m.poster_url} alt={m.title} className="mg-dropdown-poster" />
-                    : <div className="mg-dropdown-poster mg-dropdown-poster--empty"><span>{m.title[0]}</span></div>
-                  }
-                  <span className="mg-dropdown-title">{m.title}</span>
-                </div>
-              ))}
-            </div>
+        <>
+          <div className="mg-wall-bar">
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => { setQuery(e.target.value); setPage(0); }}
+              placeholder="Search the wall..."
+              className="mg-wall-search"
+            />
+            <span className="mg-wall-count">
+              {remainingCount} film{remainingCount !== 1 ? "s" : ""} remain{remainingCount === 1 ? "s" : ""}
+            </span>
+          </div>
+
+          {poolError && (
+            <p style={{ color: "var(--fbo-danger)", textAlign: "center" }}>
+              The movie wall is unavailable right now — try again shortly.
+            </p>
           )}
-          {searching && <span className="mg-search-spinner">searching...</span>}
-        </div>
+
+          {!poolError && (
+            <>
+              <div className="mg-wall">
+                {pageTiles.map((m) => {
+                  const dying = dyingIds.has(m.tmdb_id);
+                  return (
+                    <button
+                      key={m.tmdb_id}
+                      className={`mg-tile${dying ? " mg-tile--out" : ""}`}
+                      onClick={() => !dying && submitGuess(m)}
+                      disabled={submitting || dying}
+                      title={m.title}
+                    >
+                      {m.poster_url ? (
+                        <img src={tileUrl(m.poster_url)} alt={m.title} loading="lazy" className="mg-tile-poster" />
+                      ) : (
+                        <span className="mg-tile-fallback">{m.title}</span>
+                      )}
+                    </button>
+                  );
+                })}
+                {pageTiles.length === 0 && (
+                  <p className="mg-wall-empty">No movies match — try clearing the search.</p>
+                )}
+              </div>
+
+              {pageCount > 1 && (
+                <div className="mg-wall-pager">
+                  <button onClick={() => setPage(Math.max(0, clampedPage - 1))} disabled={clampedPage === 0}>
+                    ◀ Prev
+                  </button>
+                  <span>Page {clampedPage + 1} / {pageCount}</span>
+                  <button onClick={() => setPage(Math.min(pageCount - 1, clampedPage + 1))} disabled={clampedPage >= pageCount - 1}>
+                    Next ▶
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </>
       )}
 
       {/* Guess history */}
@@ -564,9 +671,10 @@ export default function MovieGuesser() {
         <div className="mg-howto">
           <h3>How to Play</h3>
           <ul>
-            <li>A movie was released near the date shown above — guess which one!</li>
-            <li>After each wrong guess, you'll see which <b>genres</b>, <b>studios</b>, <b>actors</b>, and <b>rating</b> match</li>
+            <li>One of the movies on the wall was released near the date shown above — find it!</li>
+            <li>Tap a poster to guess. Wrong guesses reveal which <b>genres</b>, <b>studios</b>, <b>actors</b>, and <b>rating</b> match — and knock every ruled-out movie off the wall</li>
             <li><b>Runtime</b> and <b>user score</b> hints tell you if the answer is higher or lower</li>
+            <li>Matching words from each guess's synopsis fill in the mystery overview</li>
             <li>Fewer guesses = better score. New puzzle every day at midnight</li>
           </ul>
         </div>

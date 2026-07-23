@@ -135,9 +135,9 @@ export const apiAdminCreatePick = (pick) =>
 
 // Movie Guesser (public, no auth)
 export const apiGuesserToday = () => jsonFetch("/api/guesser/today");
+export const apiGuesserPool = () => jsonFetch("/api/guesser/pool");
 export const apiGuesserGuess = (tmdbId, title, playerId) =>
   jsonFetch("/api/guesser/guess", { method: "POST", body: { tmdb_id: tmdbId, title, player_id: playerId } });
-export const apiGuesserSearch = (q) => jsonFetch(`/api/guesser/search?q=${encodeURIComponent(q)}`);
 export const apiGuesserComplete = (numGuesses, playerId) =>
   jsonFetch("/api/guesser/complete", { method: "POST", body: { num_guesses: numGuesses, player_id: playerId } });
 export const apiGuesserRegenerate = () =>

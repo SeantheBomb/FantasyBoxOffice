@@ -83,18 +83,10 @@ function dateToSeed(dateStr) {
   return h;
 }
 
-
-async function fetchMpaRating(tmdbId, token) {
-  try {
-    const rd = await tmdbFetch(`/movie/${tmdbId}/release_dates`, token);
-    const us = rd?.results?.find((r) => r.iso_3166_1 === "US");
-    const cert = us?.release_dates?.map((d) => d.certification).find((c) => c?.length > 0);
-    return cert || "NR";
-  } catch {
-    return "NR";
-  }
-}
-
+// Picks the daily movie from the pre-seeded guesser_pool catalog:
+// rows within ±3 days of today's month/day (any year). Pick a year
+// bucket first so sparse decades get equal odds against
+// blockbuster-dense recent years.
 export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
   const existing = await db
     .prepare("SELECT * FROM guesser_daily WHERE game_date = ?")
@@ -102,120 +94,45 @@ export async function getOrCreateDailyMovie(db, token, gameDate, salt = "") {
     .first();
   if (existing) return existing;
 
-  const currentYear = parseInt(gameDate.slice(0, 4), 10);
-  const mmdd = gameDate.slice(5);
+  const center = new Date(`${gameDate}T00:00:00Z`);
+  const days = [];
+  for (let d = -3; d <= 3; d++) {
+    days.push(new Date(center.getTime() + d * 86400000).toISOString().slice(5, 10));
+  }
+  const placeholders = days.map(() => "?").join(",");
+  const { results } = await db
+    .prepare(`SELECT * FROM guesser_pool WHERE substr(release_date, 6, 5) IN (${placeholders})`)
+    .bind(...days)
+    .all();
+  if (!results?.length) return null;
 
-  const yearsToSearch = [
-    currentYear - 1, currentYear - 3, currentYear - 5,
-    currentYear - 8, currentYear - 12, currentYear - 18,
-    currentYear - 25, currentYear - 35, currentYear - 45,
-  ].filter((y) => y >= 1970);
+  const byYear = new Map();
+  for (const r of results) {
+    const y = r.release_date.slice(0, 4);
+    if (!byYear.has(y)) byYear.set(y, []);
+    byYear.get(y).push(r);
+  }
+  const years = [...byYear.keys()].sort();
 
   const rng = mulberry32(dateToSeed(gameDate + salt));
-
-  // Collect up to 4 candidates per year, shuffle within each year
-  const perYear = [];
-  for (const y of yearsToSearch) {
-    const center = new Date(`${y}-${mmdd}T00:00:00Z`);
-    const from = new Date(center.getTime() - 3 * 86400000).toISOString().slice(0, 10);
-    const to = new Date(center.getTime() + 3 * 86400000).toISOString().slice(0, 10);
-    try {
-      const data = await tmdbFetch("/discover/movie", token, {
-        region: "US",
-        with_release_type: "2|3",
-        "primary_release_date.gte": from,
-        "primary_release_date.lte": to,
-        sort_by: "revenue.desc",
-        include_adult: false,
-        page: 1,
-      });
-      const yearCandidates = (data.results || []).filter((m) => m.id && m.title).slice(0, 4);
-      for (let i = yearCandidates.length - 1; i > 0; i--) {
-        const j = Math.floor(rng() * (i + 1));
-        [yearCandidates[i], yearCandidates[j]] = [yearCandidates[j], yearCandidates[i]];
-      }
-      if (yearCandidates.length > 0) perYear.push(yearCandidates);
-    } catch {
-      // skip failed year
-    }
-  }
-
-  if (!perYear.length) return null;
-
-  // Shuffle the year buckets so no era is systematically first
-  for (let i = perYear.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [perYear[i], perYear[j]] = [perYear[j], perYear[i]];
-  }
-
-  // Try order: one rep per era first, then remaining candidates
-  const tryOrder = [];
-  const remainders = [];
-  for (const bucket of perYear) {
-    tryOrder.push(bucket[0]);
-    for (let i = 1; i < bucket.length; i++) remainders.push(bucket[i]);
-  }
-  for (let i = remainders.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [remainders[i], remainders[j]] = [remainders[j], remainders[i]];
-  }
-  tryOrder.push(...remainders);
-
-  const seen = new Set();
-  // Cap at 10 candidates: 9 discovers + 10*2 + 1 credits = 30 subrequests max (free tier: 50)
-  const toTry = tryOrder.filter((m) => {
-    if (seen.has(m.id)) return false;
-    seen.add(m.id);
-    return true;
-  }).slice(0, 10);
-
-  let picked = null;
-  let detail = null;
-  let credits = null;
-  let mpaRatingForPicked = "NR";
-  for (const c of toTry) {
-    try {
-      // Fetch detail + release_dates together; defer credits until we have a winner
-      const [d, rd] = await Promise.all([
-        tmdbFetch(`/movie/${c.id}`, token),
-        tmdbFetch(`/movie/${c.id}/release_dates`, token),
-      ]);
-      const us = rd?.results?.find((r) => r.iso_3166_1 === "US");
-      const mpa = us?.release_dates?.map((r) => r.certification).find((c) => c?.length > 0) || "NR";
-      if (d.revenue && d.revenue >= 100_000_000 && mpa !== "NR") {
-        const cr = await tmdbFetch(`/movie/${c.id}/credits`, token);
-        picked = c;
-        detail = d;
-        credits = cr;
-        mpaRatingForPicked = mpa;
-        break;
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  if (!picked || !detail) return null;
-
-  const genres = (detail.genres || []).map((g) => g.name);
-  const companies = (detail.production_companies || []).map((c) => c.name);
-  const topCast = (credits.cast || []).slice(0, 10).map((c) => c.name);
-  const mpaRating = mpaRatingForPicked;
+  const yearBucket = byYear.get(years[Math.floor(rng() * years.length)]);
+  yearBucket.sort((a, b) => a.tmdb_id - b.tmdb_id);
+  const pick = yearBucket[Math.floor(rng() * yearBucket.length)];
 
   const row = {
     game_date: gameDate,
-    tmdb_id: picked.id,
-    title: detail.title || picked.title,
-    release_date: detail.release_date || picked.release_date,
-    revenue: detail.revenue || picked.revenue || 0,
-    runtime: detail.runtime || 0,
-    vote_average: detail.vote_average || 0,
-    mpa_rating: mpaRating,
-    genres: JSON.stringify(genres),
-    production_companies: JSON.stringify(companies),
-    top_cast: JSON.stringify(topCast),
-    poster_url: posterUrl(detail.poster_path || picked.poster_path),
-    overview: detail.overview || '',
+    tmdb_id: pick.tmdb_id,
+    title: pick.title,
+    release_date: pick.release_date,
+    revenue: pick.revenue,
+    runtime: pick.runtime || 0,
+    vote_average: pick.vote_average || 0,
+    mpa_rating: pick.mpa_rating || "NR",
+    genres: pick.genres,
+    production_companies: pick.production_companies,
+    top_cast: pick.top_cast,
+    poster_url: pick.poster_url,
+    overview: pick.overview || '',
   };
 
   await db
@@ -250,45 +167,87 @@ function scoreDirection(answerScore, guessScore) {
   return diff > 0 ? "higher" : "lower";
 }
 
-export async function compareMovies(answer, guessedTmdbId, token) {
-  const [detail, credits] = await Promise.all([
-    tmdbFetch(`/movie/${guessedTmdbId}`, token),
-    tmdbFetch(`/movie/${guessedTmdbId}/credits`, token),
-  ]);
+async function fetchMpaRating(tmdbId, token) {
+  try {
+    const rd = await tmdbFetch(`/movie/${tmdbId}/release_dates`, token);
+    const us = rd?.results?.find((r) => r.iso_3166_1 === "US");
+    const cert = us?.release_dates?.map((d) => d.certification).find((c) => c?.length > 0);
+    return cert || "NR";
+  } catch {
+    return "NR";
+  }
+}
+
+// Guesses come from the pool (wall tiles), so the guess's metadata is
+// one D1 read. TMDB fallback covers anything not in the pool.
+export async function compareMovies(answer, guessedTmdbId, token, db) {
+  let guess = null;
+  if (db) {
+    const poolRow = await db
+      .prepare("SELECT * FROM guesser_pool WHERE tmdb_id = ?")
+      .bind(guessedTmdbId)
+      .first();
+    if (poolRow) {
+      guess = {
+        title: poolRow.title,
+        poster_url: poolRow.poster_url,
+        release_year: poolRow.release_date?.slice(0, 4) || null,
+        genres: JSON.parse(poolRow.genres),
+        companies: JSON.parse(poolRow.production_companies),
+        cast: JSON.parse(poolRow.top_cast),
+        mpa: poolRow.mpa_rating || "NR",
+        runtime: poolRow.runtime || 0,
+        vote_average: poolRow.vote_average || 0,
+        overview: poolRow.overview || '',
+      };
+    }
+  }
+  if (!guess) {
+    const [detail, credits] = await Promise.all([
+      tmdbFetch(`/movie/${guessedTmdbId}`, token),
+      tmdbFetch(`/movie/${guessedTmdbId}/credits`, token),
+    ]);
+    guess = {
+      title: detail.title,
+      poster_url: posterUrl(detail.poster_path),
+      release_year: detail.release_date?.slice(0, 4) || null,
+      genres: (detail.genres || []).map((g) => g.name),
+      companies: (detail.production_companies || []).map((c) => c.name),
+      cast: (credits.cast || []).slice(0, 10).map((c) => c.name),
+      mpa: await fetchMpaRating(guessedTmdbId, token),
+      runtime: detail.runtime || 0,
+      vote_average: detail.vote_average || 0,
+      overview: detail.overview || '',
+    };
+  }
 
   const answerGenres = JSON.parse(answer.genres);
   const answerCompanies = JSON.parse(answer.production_companies);
   const answerCast = JSON.parse(answer.top_cast);
 
-  const guessGenres = (detail.genres || []).map((g) => g.name);
-  const guessCompanies = (detail.production_companies || []).map((c) => c.name);
-  const guessCast = (credits.cast || []).slice(0, 10).map((c) => c.name);
-
-  const matchingGenres = answerGenres.filter((g) => guessGenres.includes(g));
-  const matchingCompanies = answerCompanies.filter((c) => guessCompanies.includes(c));
-  const matchingCast = answerCast.filter((c) => guessCast.includes(c));
-
-  const guessMpa = await fetchMpaRating(guessedTmdbId, token);
+  const matchingGenres = answerGenres.filter((g) => guess.genres.includes(g));
+  const matchingCompanies = answerCompanies.filter((c) => guess.companies.includes(c));
+  const matchingCast = answerCast.filter((c) => guess.cast.includes(c));
 
   return {
-    title: detail.title,
-    poster_url: posterUrl(detail.poster_path),
-    release_year: detail.release_date?.slice(0, 4) || null,
+    title: guess.title,
+    poster_url: guess.poster_url,
+    release_year: guess.release_year,
     genre_match: matchingGenres.length > 0,
     company_match: matchingCompanies.length > 0,
     cast_match: matchingCast.length > 0,
     matching_genres: matchingGenres,
     matching_companies: matchingCompanies,
     matching_cast: matchingCast,
-    guessed_genres: guessGenres,
-    guessed_companies: guessCompanies,
-    guessed_cast: guessCast,
-    mpa_rating: guessMpa,
-    mpa_match: guessMpa === (answer.mpa_rating || "NR"),
-    runtime: detail.runtime || 0,
-    runtime_direction: runtimeDirection(answer.runtime, detail.runtime),
-    vote_average: detail.vote_average || 0,
-    score_direction: scoreDirection(answer.vote_average, detail.vote_average),
-    revealed: getRevealedTokens(answer.overview || '', detail.overview || ''),
+    guessed_genres: guess.genres,
+    guessed_companies: guess.companies,
+    guessed_cast: guess.cast,
+    mpa_rating: guess.mpa,
+    mpa_match: guess.mpa === (answer.mpa_rating || "NR"),
+    runtime: guess.runtime,
+    runtime_direction: runtimeDirection(answer.runtime, guess.runtime),
+    vote_average: guess.vote_average,
+    score_direction: scoreDirection(answer.vote_average, guess.vote_average),
+    revealed: getRevealedTokens(answer.overview || '', guess.overview || ''),
   };
 }
