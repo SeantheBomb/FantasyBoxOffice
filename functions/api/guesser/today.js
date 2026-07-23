@@ -2,6 +2,14 @@ import { json } from "../_auth.js";
 import { getOrCreateDailyMovie, tokenizeOverview } from "../_guesser.js";
 
 export async function onRequestGet({ env }) {
+  try {
+    return await handleRequest(env);
+  } catch (e) {
+    return json({ error: "Internal error", detail: e?.message || String(e) }, { status: 500 });
+  }
+}
+
+async function handleRequest(env) {
   await bootstrapGuesserSchema(env.DB);
 
   const today = new Date().toISOString().slice(0, 10);
