@@ -8,7 +8,7 @@
 // Shares logic with the Pages Functions in ../../functions/api via relative imports.
 
 import { refreshMovies, rollStatuses } from "../../functions/api/_tmdb.js";
-import { refreshDailies } from "../../functions/api/_boxoffice.js";
+import { refreshDailies, backfillDailies } from "../../functions/api/_boxoffice.js";
 import { settleExpiredAuctions, markAndFindClosingSoonAuctions } from "../../functions/api/_settlement.js";
 import { postAuctionSettled, postAuctionClosingSoon } from "../../functions/api/_discord.js";
 import { bootstrapSchema } from "../../functions/api/_schema.js";
@@ -57,6 +57,8 @@ export default {
       ctx.waitUntil(runStandingsPost(env));
     } else if (job === "lastcall") {
       ctx.waitUntil(runLastCallPost(env));
+    } else if (job === "backfill") {
+      ctx.waitUntil(runBackfill(env));
     } else if (job === "seed-pool") {
       const year = parseInt(url.searchParams.get("year"), 10);
       const offset = parseInt(url.searchParams.get("offset") || "0", 10);
@@ -112,5 +114,12 @@ async function runSettleExpired(env) {
       await postAuctionClosingSoon(env.DISCORD_WEBHOOK_URL, a).catch(() => {});
     }
   }
+  return result;
+}
+
+async function runBackfill(env) {
+  if (!env.TMDB_TOKEN) return { error: "TMDB_TOKEN missing" };
+  const result = await backfillDailies({ db: env.DB, token: env.TMDB_TOKEN });
+  console.log("[backfill] done:", JSON.stringify(result));
   return result;
 }
