@@ -78,19 +78,25 @@ export async function computeHistory(db, { season = "2026" } = {}) {
   const series = userRows.map((u) => ({ userId: u.id, username: u.username, points: [] }));
   const userIdToSeriesIdx = new Map(userRows.map((u, i) => [u.id, i]));
 
+  // For the most recent past weekly sample, use today's data so the chart
+  // stays in sync with the standings breakdown (which uses MAX(date)).
+  // Monday's scrape captures Sunday's full performance, so this is always current.
+  const lastPastDate = [...dates].reverse().find((d) => d <= today);
+
   for (const date of dates) {
     if (date > today) {
       // Future week — leave all points null so the chart draws no line.
       for (let i = 0; i < series.length; i++) series[i].points.push(null);
       continue;
     }
+    const lookupDate = date === lastPastDate ? today : date;
     const totals = new Array(userRows.length).fill(0);
     for (const [tmdbId, ownerId] of ownerByTmdb.entries()) {
       const release = releaseByTmdb.get(tmdbId);
-      if (!release || release > date) continue;
+      if (!release || release > lookupDate) continue;
       const idx = userIdToSeriesIdx.get(ownerId);
       if (idx == null) continue;
-      totals[idx] += revenueOnOrBefore(tmdbId, date) - (budgetByTmdb.get(tmdbId) || 0);
+      totals[idx] += revenueOnOrBefore(tmdbId, lookupDate) - (budgetByTmdb.get(tmdbId) || 0);
     }
     for (let i = 0; i < series.length; i++) series[i].points.push(totals[i]);
   }
@@ -110,7 +116,8 @@ export async function computeHistory(db, { season = "2026" } = {}) {
     });
     revenues[tmdbId] = dates.map((date) => {
       if (date > today || release > date) return null;
-      return revenueOnOrBefore(tmdbId, date);
+      const lookupDate = date === lastPastDate ? today : date;
+      return revenueOnOrBefore(tmdbId, lookupDate);
     });
   }
 
