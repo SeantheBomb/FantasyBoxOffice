@@ -262,8 +262,8 @@ export async function onRequestPost({ request, env }) {
         .bind(discordUser.id, discordUser.global_name ?? discordUser.username, tmdbId, estimate, weekend)
         .run();
 
-      if (env.DISCORD_WEBHOOK_URL) {
-        await fetch(env.DISCORD_WEBHOOK_URL, {
+      if (env.DISCORD_GAME_FEED_WEBHOOK_URL) {
+        await fetch(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -328,7 +328,7 @@ export async function onRequestPost({ request, env }) {
         `INSERT INTO auction_bids (id, auction_id, user_id, amount, bid_at) VALUES (?, ?, ?, ?, ?)`
       ).bind(crypto.randomUUID(), id, leagueUser.id, startingBid, now).run();
 
-      await postAuctionStarted(env.DISCORD_WEBHOOK_URL, {
+      await postAuctionStarted(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
         movieTitle: movie.title,
         posterUrl: movie.poster_url,
         endsAt,
@@ -399,7 +399,7 @@ export async function onRequestPost({ request, env }) {
         ).bind(auction.id, leagueUser.id),
       ]);
 
-      await postBidPlaced(env.DISCORD_WEBHOOK_URL, {
+      await postBidPlaced(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
         movieTitle: auction.movie_title,
         bidderDiscordId: discordUser.id,
         bidderUsername: leagueUser.username,
@@ -409,7 +409,7 @@ export async function onRequestPost({ request, env }) {
 
       const settleResult = await settleIfAllPassed(env.DB, auction.id);
       if (settleResult.settled) {
-        await postAuctionSettled(env.DISCORD_WEBHOOK_URL, {
+        await postAuctionSettled(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
           movieTitle: settleResult.movieTitle,
           posterUrl: settleResult.posterUrl,
           releaseDate: settleResult.releaseDate,
@@ -478,7 +478,7 @@ export async function onRequestPost({ request, env }) {
          ON CONFLICT(auction_id, user_id) DO NOTHING`
       ).bind(auction.id, leagueUser.id, new Date().toISOString()).run();
 
-      await postPassPlaced(env.DISCORD_WEBHOOK_URL, {
+      await postPassPlaced(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
         movieTitle: auction.movie_title,
         passerDiscordId: discordUser.id,
         passerUsername: leagueUser.username,
@@ -486,7 +486,7 @@ export async function onRequestPost({ request, env }) {
 
       const settleResult = await settleIfAllPassed(env.DB, auction.id);
       if (settleResult.settled) {
-        await postAuctionSettled(env.DISCORD_WEBHOOK_URL, {
+        await postAuctionSettled(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
           movieTitle: settleResult.movieTitle,
           posterUrl: settleResult.posterUrl,
           releaseDate: settleResult.releaseDate,
@@ -551,7 +551,7 @@ export async function onRequestPost({ request, env }) {
         const standings = await computeStandings(env.DB);
         const ownerIndex = standings.users.findIndex((u) => u.id === row.owner_user_id);
         const ownerStanding = ownerIndex >= 0 ? { ...standings.users[ownerIndex], place: ownerIndex + 1 } : null;
-        await postMovieVoided(env.DISCORD_WEBHOOK_URL, {
+        await postMovieVoided(env.DISCORD_GAME_FEED_WEBHOOK_URL, {
           movieTitle: row.title,
           posterUrl: row.poster_url,
           ownerUsername: row.owner_username,
