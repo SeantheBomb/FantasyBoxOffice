@@ -85,7 +85,49 @@ async function runMoviesRefresh(env) {
     to: SEASON_TO,
   });
   await rollStatuses(env.DB);
-  return { upserted };
+  const delays = await checkWeekendMovieDelays(env);
+  return { upserted, delays };
+}
+
+// After each TMDB refresh, find upcoming weekend_movies whose release_date has
+// shifted more than 7 days past their scheduled weekend. Remove them and post
+// an announcement so the league knows bets for that movie are cancelled.
+async function checkWeekendMovieDelays(env) {
+  const { results } = await env.DB.prepare(
+    `SELECT wm.tmdb_id, wm.weekend_date, m.title, m.release_date
+     FROM weekend_movies wm
+     JOIN movies m ON m.tmdb_id = wm.tmdb_id
+     WHERE wm.weekend_date > date('now')
+       AND (m.release_date IS NULL OR m.release_date > date(wm.weekend_date, '+7 days'))`
+  ).all();
+
+  if (!results?.length) return [];
+
+  const removed = [];
+  for (const row of results) {
+    await env.DB.batch([
+      env.DB.prepare(`DELETE FROM weekend_picks WHERE tmdb_id = ? AND weekend_date = ?`).bind(row.tmdb_id, row.weekend_date),
+      env.DB.prepare(`DELETE FROM weekend_movies WHERE tmdb_id = ? AND weekend_date = ?`).bind(row.tmdb_id, row.weekend_date),
+    ]);
+
+    if (env.DISCORD_WEBHOOK_URL) {
+      const newDate = row.release_date
+        ? new Date(row.release_date + "T12:00:00Z").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+        : "TBD";
+      await fetch(env.DISCORD_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: `📅 **${row.title}** has been removed from the **${row.weekend_date}** weekend lineup — its release date moved to **${newDate}**. Any picks for this movie have been cancelled.`,
+        }),
+      }).catch(() => {});
+    }
+
+    console.log(`[movies] delay detected: ${row.title} removed from ${row.weekend_date} (new date: ${row.release_date})`);
+    removed.push({ tmdb_id: row.tmdb_id, title: row.title, weekend_date: row.weekend_date, new_release_date: row.release_date });
+  }
+
+  return removed;
 }
 
 async function runDailiesRefresh(env) {
