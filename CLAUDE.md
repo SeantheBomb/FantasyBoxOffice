@@ -52,7 +52,7 @@ Admin UI button: "Post to Discord" → `POST /api/admin/discord/test-post`.
 node --loader ./worker/test/loader.mjs ./worker/test/run-standings-local.mjs
 ```
 
-Seeds an in-memory SQLite DB (via `better-sqlite3`), stubs `fetch` to capture Discord/BOM/TMDB/QuickChart calls, runs the full `runStandingsPost()` flow, and validates: scoring correctness (points 3/2/1), standings posted, chart rendered, announcement posted. Run this before deploying changes to the standings job.
+Seeds an in-memory SQLite DB (via `better-sqlite3`), stubs `fetch` to capture Discord/BOM/TMDB/QuickChart calls, runs the full `runStandingsPost()` flow, and validates: scoring correctness (3 bettors → 2/1/0), standings posted, chart rendered, announcement posted. Run this before deploying changes to the standings job.
 
 ## Schema
 
@@ -76,6 +76,8 @@ Key tables:
 2. **Prediction earnings** — incremented when `scoreMovie()` awards points for weekend pick accuracy.
 
 There is no separate "prediction points" balance. Winning predictions directly funds auction bids.
+
+Payout scales with the number of bettors on a movie: 1st place earns `min(bettors − 1, 3)`, each lower place one less, floored at 0 (1 bettor → 0; 2 → 1/0; 3 → 2/1/0; 4+ → 3/2/1/0…). The Thursday last-call post flags movies with 0–1 bets as earning no points.
 
 `scoreMovie()` in `functions/api/_weekend-scoring.js` uses a delta-based update so re-scoring is idempotent: it fetches `COALESCE(points_awarded, 0)` as `old_points` before updating, then applies `new_points - old_points` to `users.points_remaining`. Re-scoring the same result is a no-op; correcting a score adjusts the balance up or down by exactly the difference.
 

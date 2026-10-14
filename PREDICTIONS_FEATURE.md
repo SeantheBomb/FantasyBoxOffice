@@ -14,7 +14,7 @@ Five friends play a season-long fantasy league based on real domestic box office
 2. **Players bet** on how much each movie will earn on its opening weekend, in integer millions (e.g. `$45M`). One bet per player per movie. No two players can pick the same amount for the same movie.
 3. **Betting closes** automatically when movies hit theaters (Friday/Saturday). No late entries.
 4. **On Monday**, the cron job auto-scores picks using opening weekend gross pulled from Box Office Mojo, posts results to Discord with `@mentions` and points awarded, then immediately announces next weekend's lineup.
-5. **Points** are awarded `[3, 2, 1, 0]` by closest estimate. Closest = 1st place = 3 points, etc. Ties broken by sort order (stable). **These points go directly into `users.points_remaining` — the same pool used to bid on movies at auction.**
+5. **Points** are awarded by closest estimate and scale with the number of bettors: 1st place earns `min(bettors − 1, 3)`, each lower place one less, floored at 0 (1 bettor → 0; 2 → 1/0; 3 → 2/1/0; 4+ → 3/2/1/0…). Ties broken by sort order (stable). **These points go directly into `users.points_remaining` — the same pool used to bid on movies at auction.**
 6. **Abstentions** (no bet placed) earn 0 points and are called out by name in the results post.
 7. The `/betting` page on the website gives the same experience to users who prefer not to use Discord.
 
@@ -65,7 +65,7 @@ weekend_picks (
   tmdb_id          INTEGER NOT NULL,
   estimate         INTEGER NOT NULL, -- INTEGER MILLIONS: 45 = $45M
   weekend_date     TEXT NOT NULL,
-  points_awarded   INTEGER,         -- NULL until scored; 3/2/1/0
+  points_awarded   INTEGER,         -- NULL until scored; see pointsForPlace()
   created_at       TEXT DEFAULT (datetime('now')),
   UNIQUE(discord_user_id, tmdb_id, weekend_date)
 )
@@ -125,12 +125,12 @@ scoreMovie(db, { tmdb_id, weekend_date, actual_gross }) → { title, actual_gros
 
 1. Upserts `weekend_results`.
 2. Fetches all picks for this movie/weekend, ordered by `ABS(estimate - actual_gross) ASC`.
-3. Awards points `[3, 2, 1, 0, 0, ...]` in order.
+3. Awards points in order via `pointsForPlace(place, bettors)`.
 4. Batch-updates `weekend_picks.points_awarded`.
 5. Fetches cumulative totals for all involved players.
 6. Builds a Discord content string with `<@discord_user_id>` mentions, place labels, points earned, and running totals. Abstentions listed at the end.
 
-**Points system:** `POINTS = [3, 2, 1]` — index 0 gets 3, index 1 gets 2, index 2 gets 1, all others get 0. After updating `points_awarded`, `scoreMovie` also updates `users.points_remaining` by the delta (new − old) so re-scoring correctly adjusts rather than double-counting.
+**Points system:** `pointsForPlace(place, bettors)` — 1st place earns `min(bettors − 1, 3)`, each lower place one less, floored at 0 (1 bettor → 0; 2 → 1/0; 3 → 2/1/0; 4+ → 3/2/1/0…). After updating `points_awarded`, `scoreMovie` also updates `users.points_remaining` by the delta (new − old) so re-scoring correctly adjusts rather than double-counting.
 
 ### `functions/api/betting/current.js`
 Public GET — active weekend data for the `/betting` page.

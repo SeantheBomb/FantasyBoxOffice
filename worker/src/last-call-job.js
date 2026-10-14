@@ -10,7 +10,9 @@ export async function runLastCallPost(env) {
   const weekendDate = weekend.weekend_date;
 
   const { results: movies } = await env.DB.prepare(
-    `SELECT m.title, u.username AS owner
+    `SELECT m.title, u.username AS owner,
+            (SELECT COUNT(*) FROM weekend_picks wp
+             WHERE wp.tmdb_id = wm.tmdb_id AND wp.weekend_date = wm.weekend_date) AS bettors
      FROM weekend_movies wm
      JOIN movies m ON m.tmdb_id = wm.tmdb_id
      LEFT JOIN owned_movies om ON om.tmdb_id = wm.tmdb_id AND om.is_void = 0
@@ -35,8 +37,12 @@ export async function runLastCallPost(env) {
   if (!missing.length) return { skipped: "all players have placed their bets" };
 
   const mentions = missing.map((u) => `<@${u.discord_user_id}>`).join(" ");
-  const list = movies.map((m) => `• **${m.title}**${m.owner ? ` — owned by ${m.owner}` : ""}`).join("\n");
-  const content = `${mentions}\n📣 **Last call!** Betting closes when movies hit theaters **Friday**. Use \`/bet\` to lock in your picks!\n\n${list}`;
+  const list = movies.map((m) => `• **${m.title}**${m.owner ? ` — owned by ${m.owner}` : ""}${noPointsWarning(m.bettors)}`).join("\n");
+  const anyAtRisk = movies.some((m) => m.bettors <= 1);
+  const footer = anyAtRisk
+    ? "\n\n⚠️ A movie with fewer than 2 bets awards **no points** — winning a bet needs someone to beat."
+    : "";
+  const content = `${mentions}\n📣 **Last call!** Betting closes when movies hit theaters **Friday**. Use \`/bet\` to lock in your picks!\n\n${list}${footer}`;
 
   const res = await fetch(env.DISCORD_WEBHOOK_URL, {
     method: "POST",
@@ -50,4 +56,10 @@ export async function runLastCallPost(env) {
   }
 
   return { posted: true, mentioned: missing.length, movies: movies.length };
+}
+
+function noPointsWarning(bettors) {
+  if (bettors === 0) return " — ⚠️ **no bets yet, no points will be awarded**";
+  if (bettors === 1) return " — ⚠️ **only 1 bet, no points will be awarded** unless someone else bets";
+  return "";
 }

@@ -99,7 +99,7 @@ Discord Interactions endpoint. Handles:
 
 ### `functions/api/_weekend-scoring.js`
 Shared scoring logic used by both the admin endpoint and the Monday cron:
-- `scoreMovie(db, { tmdb_id, weekend_date, actual_gross })` — upserts `weekend_results`, ranks picks by closest estimate, awards points `[3, 2, 1, 0, ...]`, updates `points_awarded`, builds Discord content with `<@discord_user_id>` mentions and abstentions list
+- `scoreMovie(db, { tmdb_id, weekend_date, actual_gross })` — upserts `weekend_results`, ranks picks by closest estimate, awards points via `pointsForPlace()` (top prize `min(bettors − 1, 3)`), updates `points_awarded`, builds Discord content with `<@discord_user_id>` mentions and abstentions list
 
 ### `functions/api/admin/weekend/score.js`
 - `GET` — returns active weekend date, movies, all picks (with `id` for editing), abstentions

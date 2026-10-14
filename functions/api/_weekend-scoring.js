@@ -2,7 +2,13 @@
 
 import { formatShort } from "./_format.js";
 
-const POINTS = [3, 2, 1];
+const MAX_POINTS = 3;
+
+// 1st place earns (bettors - 1) capped at MAX_POINTS, each lower place one less.
+// A lone bettor has nobody to beat, so earns nothing.
+export function pointsForPlace(place, bettors) {
+  return Math.max(Math.min(bettors - 1, MAX_POINTS) - place, 0);
+}
 
 export async function scoreMovie(db, { tmdb_id, weekend_date, actual_gross }) {
   await db
@@ -44,7 +50,7 @@ export async function scoreMovie(db, { tmdb_id, weekend_date, actual_gross }) {
     )
     .all();
 
-  const scored = picks.map((p, i) => ({ ...p, points: POINTS[i] ?? 0 }));
+  const scored = picks.map((p, i) => ({ ...p, points: pointsForPlace(i, picks.length) }));
   const pickerIds = new Set(scored.map((p) => p.discord_user_id));
   const abstentions = leagueUsers.filter((u) => !pickerIds.has(u.discord_user_id));
 

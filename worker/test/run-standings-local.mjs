@@ -97,23 +97,23 @@ const picks = sqlite.prepare(
 
 check("3 picks scored", picks.length === 3, `got ${picks.length}`);
 
-// Alice=$45M (closest to $44M) → 3pts, Carol=$50M → 2pts, Bob=$30M → 1pt
+// 3 bettors → top prize is 2. Alice=$45M (closest to $44M) → 2pts, Carol=$50M → 1pt, Bob=$30M → 0
 const alice = picks.find(p => p.discord_username === "Alice");
 const carol = picks.find(p => p.discord_username === "Carol");
 const bob = picks.find(p => p.discord_username === "Bob");
 
-check("Alice (closest) gets 3 pts", alice?.points_awarded === 3, `got ${alice?.points_awarded}`);
-check("Carol (2nd closest) gets 2 pts", carol?.points_awarded === 2, `got ${carol?.points_awarded}`);
-check("Bob (farthest) gets 1 pt", bob?.points_awarded === 1, `got ${bob?.points_awarded}`);
+check("Alice (closest) gets 2 pts", alice?.points_awarded === 2, `got ${alice?.points_awarded}`);
+check("Carol (2nd closest) gets 1 pt", carol?.points_awarded === 1, `got ${carol?.points_awarded}`);
+check("Bob (farthest) gets 0 pts", bob?.points_awarded === 0, `got ${bob?.points_awarded}`);
 
 // Check user point balances updated
 const aliceUser = sqlite.prepare("SELECT points_remaining FROM users WHERE id = 'u1'").get();
 const carolUser = sqlite.prepare("SELECT points_remaining FROM users WHERE id = 'u3'").get();
 const bobUser = sqlite.prepare("SELECT points_remaining FROM users WHERE id = 'u2'").get();
 
-check("Alice points = 50 + 3 = 53", aliceUser?.points_remaining === 53, `got ${aliceUser?.points_remaining}`);
-check("Carol points = 30 + 2 = 32", carolUser?.points_remaining === 32, `got ${carolUser?.points_remaining}`);
-check("Bob points = 40 + 1 = 41", bobUser?.points_remaining === 41, `got ${bobUser?.points_remaining}`);
+check("Alice points = 50 + 2 = 52", aliceUser?.points_remaining === 52, `got ${aliceUser?.points_remaining}`);
+check("Carol points = 30 + 1 = 31", carolUser?.points_remaining === 31, `got ${carolUser?.points_remaining}`);
+check("Bob points = 40 + 0 = 40", bobUser?.points_remaining === 40, `got ${bobUser?.points_remaining}`);
 
 console.log("\n── Scoring Result Object ────────────────────────────────\n");
 
