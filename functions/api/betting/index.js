@@ -1,4 +1,5 @@
 import { json, badRequest, getCookie } from "../_auth.js";
+import { getOpenWeekends } from "../_betting.js";
 
 export async function onRequestPost({ request, env }) {
   // Need discord_user_id and in_league — fetch via session directly
@@ -23,15 +24,13 @@ export async function onRequestPost({ request, env }) {
   const estimate = Number(body.estimate);
   if (!Number.isInteger(estimate) || estimate <= 0) return badRequest("estimate must be a positive integer (millions)");
 
-  const today = new Date().toISOString().slice(0, 10);
-
-  // Movie must be in an upcoming weekend's lineup
-  const weekend = await env.DB.prepare(
-    `SELECT weekend_date FROM weekend_movies WHERE weekend_date > ? AND tmdb_id = ? LIMIT 1`
-  ).bind(today, body.tmdb_id).first();
-  if (!weekend) return json({ error: "Betting is closed — this movie is already in theaters or not in the lineup" }, { status: 400 });
-
-  const weekendDate = weekend.weekend_date;
+  // Movie must be in the lineup of a weekend that's still accepting bets
+  const openDates = new Set((await getOpenWeekends(env.DB)).map((w) => w.weekend_date));
+  const { results: lineups } = await env.DB.prepare(
+    `SELECT weekend_date FROM weekend_movies WHERE tmdb_id = ? ORDER BY weekend_date`
+  ).bind(body.tmdb_id).all();
+  const weekendDate = lineups.find((r) => openDates.has(r.weekend_date))?.weekend_date;
+  if (!weekendDate) return json({ error: "Betting is closed — this movie is already in theaters or not in the lineup" }, { status: 400 });
   const discordId = user.discord_user_id ?? "fbo_" + user.id;
 
   // No double-betting

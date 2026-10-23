@@ -1,5 +1,6 @@
 import { json, badRequest, requireAdmin } from "../../_auth.js";
 import { scoreMovie } from "../../_weekend-scoring.js";
+import { getBettingWindow } from "../../_betting.js";
 
 async function getActiveDate(db, override) {
   if (override) return override;
@@ -79,7 +80,9 @@ export async function onRequestGet({ request, env }) {
     abstentionsByMovie[m.tmdb_id] = leagueUsers.filter((u) => !pickers.has(u.discord_user_id));
   }
 
-  return json({ weekend_date: weekendDate, movies, picks: picksByMovie, abstentions: abstentionsByMovie });
+  const betting = await getBettingWindow(env.DB, weekendDate);
+
+  return json({ weekend_date: weekendDate, movies, picks: picksByMovie, abstentions: abstentionsByMovie, betting });
 }
 
 export async function onRequestPost({ request, env }) {

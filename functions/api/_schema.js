@@ -22,5 +22,12 @@ export async function bootstrapSchema(db) {
   await db.prepare(
     `ALTER TABLE auctions ADD COLUMN warning_sent_at TEXT`
   ).run().catch(() => {});
+  await db.prepare(
+    `CREATE TABLE IF NOT EXISTS weekend_betting_windows (
+       weekend_date TEXT PRIMARY KEY,
+       closes_at TEXT NOT NULL,
+       updated_at TEXT DEFAULT (datetime('now'))
+     )`
+  ).run();
   bootstrapped = true;
 }

@@ -126,6 +126,11 @@ export const apiAdminPostWeekendAnnouncement = () =>
   jsonFetch("/api/admin/weekend/announce", { method: "POST", body: {} });
 export const apiAdminPostLastCall = () =>
   jsonFetch("/api/admin/weekend/last-call", { method: "POST", body: {} });
+export const apiAdminSetBettingWindow = (weekendDate, closesAt, notify = true) =>
+  jsonFetch("/api/admin/weekend/betting-window", {
+    method: "POST",
+    body: { weekend_date: weekendDate, closes_at: closesAt, notify },
+  });
 export const apiAdminUpdatePick = (id, estimate) =>
   jsonFetch("/api/admin/weekend/picks", { method: "PATCH", body: { id, estimate } });
 export const apiAdminDeletePick = (id) =>
