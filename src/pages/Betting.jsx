@@ -178,7 +178,7 @@ function MovieCard({ movie, isOpen, isInLeague, hasAuth, onBetPlaced }) {
 }
 
 function WeekendSection({ weekend, label, isInLeague, hasAuth, onBetPlaced }) {
-  const { weekend_date, is_open, movies } = weekend;
+  const { weekend_date, is_open, closes_at, movies } = weekend;
   const scored = movies.some((m) => m.actual_gross != null);
 
   return (
@@ -193,6 +193,11 @@ function WeekendSection({ weekend, label, isInLeague, hasAuth, onBetPlaced }) {
             ? <span style={{ fontSize: 12, background: "#3b82f6", color: "#fff", borderRadius: 12, padding: "2px 8px", fontWeight: 600 }}>Results In</span>
             : <span style={{ fontSize: 12, background: "#6b7280", color: "#fff", borderRadius: 12, padding: "2px 8px", fontWeight: 600 }}>Betting Closed</span>
         }
+        {is_open && closes_at && (
+          <span style={{ fontSize: 12, color: "#aaa" }}>
+            Closes {new Date(closes_at).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit", timeZoneName: "short" })}
+          </span>
+        )}
       </div>
       {movies.length === 0 ? (
         <p style={{ color: "#888" }}>No movies in lineup yet.</p>

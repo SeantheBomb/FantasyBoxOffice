@@ -13,7 +13,7 @@ import {
   apiGameCatalog,
   apiAdminWeekendScore, apiAdminScoreMovie,
   apiAdminSuggestLineup, apiAdminSetWeekendMovies, apiAdminPostWeekendAnnouncement, apiAdminPostLastCall,
-  apiAdminUpdatePick, apiAdminDeletePick, apiAdminCreatePick,
+  apiAdminUpdatePick, apiAdminDeletePick, apiAdminCreatePick, apiAdminSetBettingWindow,
   apiBettingHistory,
 } from "../api";
 import { useUser } from "../useUser";
@@ -986,6 +986,18 @@ function nextFriday() {
   return d.toISOString().slice(0, 10);
 }
 
+// ISO timestamp → value for <input type="datetime-local"> in the browser's zone.
+function toLocalInput(iso) {
+  const d = new Date(iso);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
+function fmtCloses(iso) {
+  return new Date(iso).toLocaleString(undefined, {
+    weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short",
+  });
+}
+
 function WeekendPanel() {
   const [data, setData] = useState(null);
   const [version, setVersion] = useState(0);
@@ -1012,6 +1024,10 @@ function WeekendPanel() {
   const [lineupBusy, setLineupBusy] = useState(false);
   const [lineupMsg, setLineupMsg] = useState(null);
   const [suggestingLineup, setSuggestingLineup] = useState(false);
+  const [windowInput, setWindowInput] = useState(null); // null = show the saved close time
+  const [windowNotify, setWindowNotify] = useState(true);
+  const [windowBusy, setWindowBusy] = useState(false);
+  const [windowMsg, setWindowMsg] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1102,6 +1118,17 @@ function WeekendPanel() {
     setLastCallMsg(r.ok ? { ok: true, text: "Last-call posted to #movie-chat" } : { error: r.data?.error || "Failed" });
   }
 
+  async function saveBettingWindow(closesAt) {
+    setWindowBusy(true);
+    setWindowMsg(null);
+    const r = await apiAdminSetBettingWindow(data.weekend_date, closesAt, windowNotify);
+    setWindowBusy(false);
+    if (!r.ok) { setWindowMsg({ error: r.data?.error || "Failed" }); return; }
+    setData((d) => ({ ...d, betting: r.data.betting }));
+    setWindowInput(null);
+    setWindowMsg({ ok: true, text: r.data.posted ? "Saved — posted to #movie-chat" : "Saved" });
+  }
+
   async function savePick() {
     if (!editingPick) return;
     const est = Number(editingPick.estimate); // integer millions, e.g. 45 = $45M
@@ -1150,6 +1177,7 @@ function WeekendPanel() {
     }
   }
 
+  const windowValue = windowInput ?? (data?.betting ? toLocalInput(data.betting.closes_at) : "");
   const movies = data?.movies || [];
   const picks = data?.picks || {};
   const abstentions = data?.abstentions || {};
@@ -1275,6 +1303,38 @@ function WeekendPanel() {
             <span style={{ color: "var(--fbo-text-muted)" }}>Showing {data.weekend_date}</span>
           )}
         </div>
+        {data?.betting && (
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 13, marginTop: 10 }}>
+            <span>
+              Betting close time{" "}
+              <b>{fmtCloses(data.betting.closes_at)}</b>
+              {data.betting.override_closes_at && (
+                <span style={{ color: "var(--fbo-text-muted)" }}> (override — default {fmtCloses(data.betting.default_closes_at)})</span>
+              )}
+            </span>
+            <input
+              type="datetime-local"
+              value={windowValue}
+              onChange={(e) => setWindowInput(e.target.value)}
+            />
+            <button
+              disabled={windowBusy || !windowValue}
+              onClick={() => saveBettingWindow(new Date(windowValue).toISOString())}
+              title="Override when betting closes for this weekend — use to give a grace period"
+            >
+              {windowBusy ? "Saving..." : "Set close time"}
+            </button>
+            {data.betting.override_closes_at && (
+              <button disabled={windowBusy} onClick={() => saveBettingWindow(null)}>Reset to default</button>
+            )}
+            <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <input type="checkbox" checked={windowNotify} onChange={(e) => setWindowNotify(e.target.checked)} />
+              Post to #movie-chat
+            </label>
+            {windowMsg?.ok && <span style={{ color: "var(--fbo-success)" }}>{windowMsg.text}</span>}
+            {windowMsg?.error && <span style={{ color: "var(--fbo-danger)" }}>{windowMsg.error}</span>}
+          </div>
+        )}
       </div>
 
       {/* Picks & scoring per movie */}

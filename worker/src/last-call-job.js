@@ -1,11 +1,11 @@
+import { getOpenWeekends } from "../../functions/api/_betting.js";
+
 export async function runLastCallPost(env) {
   if (!env.DISCORD_WEBHOOK_URL) return { error: "DISCORD_WEBHOOK_URL missing" };
 
-  const weekend = await env.DB.prepare(
-    `SELECT MIN(weekend_date) as weekend_date FROM weekend_movies WHERE weekend_date > date('now')`
-  ).first();
+  const [weekend] = await getOpenWeekends(env.DB);
 
-  if (!weekend?.weekend_date) return { skipped: "no upcoming weekend movies" };
+  if (!weekend) return { skipped: "no upcoming weekend movies" };
 
   const weekendDate = weekend.weekend_date;
 
@@ -42,7 +42,8 @@ export async function runLastCallPost(env) {
   const footer = anyAtRisk
     ? "\n\n⚠️ A movie with fewer than 2 bets awards **no points** — winning a bet needs someone to beat."
     : "";
-  const content = `${mentions}\n📣 **Last call!** Betting closes when movies hit theaters **Friday**. Use \`/bet\` to lock in your picks!\n\n${list}${footer}`;
+  const closesUnix = Math.floor(Date.parse(weekend.closes_at) / 1000);
+  const content = `${mentions}\n📣 **Last call!** Betting closes <t:${closesUnix}:F> (<t:${closesUnix}:R>). Use \`/bet\` to lock in your picks!\n\n${list}${footer}`;
 
   const res = await fetch(env.DISCORD_WEBHOOK_URL, {
     method: "POST",

@@ -1,4 +1,5 @@
 import { json, getCookie } from "../_auth.js";
+import { getOpenWeekends, getBettingWindow } from "../_betting.js";
 
 export async function onRequestGet({ request, env }) {
   // Identify current user (unauthenticated access allowed — just no my_pick)
@@ -22,8 +23,11 @@ export async function onRequestGet({ request, env }) {
 
   const today = new Date().toISOString().slice(0, 10);
 
-  // Prefer the earliest future weekend; fall back to the most recent past weekend within 7 days
-  let weekend = await env.DB.prepare(
+  // Prefer a weekend still taking bets, then the earliest future weekend, then
+  // the most recent past weekend within 7 days.
+  let weekend = (await getOpenWeekends(env.DB))[0];
+
+  if (!weekend) weekend = await env.DB.prepare(
     `SELECT MIN(weekend_date) as weekend_date FROM weekend_movies
      WHERE weekend_date >= ?`
   ).bind(today).first();
@@ -38,7 +42,8 @@ export async function onRequestGet({ request, env }) {
   if (!weekend?.weekend_date) return json({ weekend: null });
 
   const weekendDate = weekend.weekend_date;
-  const isOpen = weekendDate > today;
+  const { closes_at } = await getBettingWindow(env.DB, weekendDate);
+  const isOpen = Date.parse(closes_at) > Date.now();
 
   const moviesRows = await env.DB.prepare(
     `SELECT m.tmdb_id, m.title, m.poster_url, m.release_date,
@@ -74,5 +79,5 @@ export async function onRequestGet({ request, env }) {
     return { ...m, picks, my_pick: myPick };
   });
 
-  return json({ weekend: { weekend_date: weekendDate, is_open: isOpen, is_in_league: meInLeague, movies } });
+  return json({ weekend: { weekend_date: weekendDate, is_open: isOpen, closes_at, is_in_league: meInLeague, movies } });
 }

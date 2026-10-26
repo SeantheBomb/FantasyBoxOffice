@@ -1,4 +1,5 @@
 import { settleIfAllPassed } from "../_settlement.js";
+import { getOpenWeekends } from "../_betting.js";
 import { computeStandings } from "../game/_standings.js";
 import {
   postAuctionStarted,
@@ -69,14 +70,7 @@ function ephemeral(content) {
 }
 
 async function getActiveWeekend(db) {
-  const row = await db
-    .prepare(
-      `SELECT DISTINCT weekend_date FROM weekend_movies
-       WHERE weekend_date > date('now')
-       ORDER BY weekend_date ASC LIMIT 1`
-    )
-    .first();
-  return row?.weekend_date ?? null;
+  return (await getOpenWeekends(db))[0]?.weekend_date ?? null;
 }
 
 // Look up the league user linked to a Discord user ID.
