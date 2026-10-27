@@ -10,22 +10,16 @@ import {
   fmtDollars,
 } from "../../functions/api/_showdown.js";
 
-// Settles unsettled showdowns whose weekend_date falls between fromDays and
-// toDays ago. The Monday standings job covers last weekend; the daily cron
-// retries anything still waiting on BOM numbers.
+// Settles showdowns with open bets whose weekend_date falls between fromDays
+// and toDays ago. A showdown nobody played is never recorded. The Monday
+// standings job covers last weekend; the daily cron retries anything still
+// waiting on BOM numbers.
 export async function runShowdownSettlement(env, { fromDays, toDays }) {
   await bootstrapSchema(env.DB);
-  const from = `-${fromDays} days`;
-  const to = `-${toDays} days`;
   const { results: weekends } = await env.DB.prepare(
-    `SELECT wm.weekend_date FROM weekend_movies wm
-     WHERE wm.weekend_date BETWEEN date('now', ?) AND date('now', ?)
-       AND NOT EXISTS (SELECT 1 FROM showdown_results sr WHERE sr.weekend_date = wm.weekend_date)
-     GROUP BY wm.weekend_date HAVING COUNT(*) >= 2
-     UNION
-     SELECT DISTINCT b.weekend_date FROM showdown_bets b
-     WHERE b.weekend_date BETWEEN date('now', ?) AND date('now', ?) AND b.outcome IS NULL`
-  ).bind(from, to, from, to).all();
+    `SELECT DISTINCT weekend_date FROM showdown_bets
+     WHERE weekend_date BETWEEN date('now', ?) AND date('now', ?) AND outcome IS NULL`
+  ).bind(`-${fromDays} days`, `-${toDays} days`).all();
 
   const out = [];
   for (const { weekend_date } of weekends) {

@@ -63,16 +63,15 @@ export async function getOpenShowdown(db) {
   return null;
 }
 
-// The open showdown, else the most recent one from the past week (closed,
-// in theaters, or settled) so players can still follow it.
+// The open showdown, else the most recent one from the past week that anyone
+// played (closed, in theaters, or settled) so players can still follow it.
 export async function getCurrentShowdown(db) {
   const open = await getOpenShowdown(db);
   if (open) return { weekend_date: open.weekend_date, closes_at: open.closes_at, is_open: true };
   const row = await db
     .prepare(
-      `SELECT weekend_date FROM weekend_movies
+      `SELECT weekend_date FROM showdown_bets
        WHERE weekend_date >= date('now', '-7 days')
-       GROUP BY weekend_date HAVING COUNT(*) >= 2
        ORDER BY weekend_date DESC LIMIT 1`
     )
     .first();
