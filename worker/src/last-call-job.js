@@ -1,4 +1,5 @@
 import { getOpenWeekends } from "../../functions/api/_betting.js";
+import { getShowdownBoard, taleOfTheTape } from "../../functions/api/_showdown.js";
 
 export async function runLastCallPost(env) {
   if (!env.DISCORD_WEBHOOK_URL) return { error: "DISCORD_WEBHOOK_URL missing" };
@@ -34,16 +35,32 @@ export async function runLastCallPost(env) {
        ) < ?`
   ).bind(weekendDate, movies.length).all();
 
-  if (!missing.length) return { skipped: "all players have placed their bets" };
+  let showdownSection = "";
+  let showdownMissing = [];
+  if (movies.length >= 2) {
+    const board = await getShowdownBoard(env.DB, weekendDate);
+    const entered = new Set(board.bets.map((b) => b.discord_user_id));
+    const { results: league } = await env.DB.prepare(
+      `SELECT discord_user_id FROM users WHERE in_league = 1 AND discord_user_id IS NOT NULL`
+    ).all();
+    showdownMissing = league.filter((u) => !entered.has(u.discord_user_id));
+    const sittingOut = showdownMissing.length
+      ? `Still sitting it out: ${showdownMissing.map((u) => `<@${u.discord_user_id}>`).join(" ")}`
+      : "Everyone's in the ring. 🥊";
+    showdownSection = `\n\n### ⚔️ Showdown — double or nothing\n${taleOfTheTape(board.movies)}\n${sittingOut}\nPick the weekend winner with \`/showdown pick\`.`;
+  }
 
-  const mentions = missing.map((u) => `<@${u.discord_user_id}>`).join(" ");
+  if (!missing.length && !showdownMissing.length) return { skipped: "all players have placed their bets" };
+
+  const mentionIds = [...new Set([...missing, ...showdownMissing].map((u) => u.discord_user_id))];
+  const mentions = mentionIds.map((id) => `<@${id}>`).join(" ");
   const list = movies.map((m) => `• **${m.title}**${m.owner ? ` — owned by ${m.owner}` : ""}${noPointsWarning(m.bettors)}`).join("\n");
   const anyAtRisk = movies.some((m) => m.bettors <= 1);
   const footer = anyAtRisk
     ? "\n\n⚠️ A movie with fewer than 2 bets awards **no points** — winning a bet needs someone to beat."
     : "";
   const closesUnix = Math.floor(Date.parse(weekend.closes_at) / 1000);
-  const content = `${mentions}\n📣 **Last call!** Betting closes <t:${closesUnix}:F> (<t:${closesUnix}:R>). Use \`/bet\` to lock in your picks!\n\n${list}${footer}`;
+  const content = `${mentions}\n📣 **Last call!** Betting closes <t:${closesUnix}:F> (<t:${closesUnix}:R>). Use \`/bet\` to lock in your picks!\n\n${list}${footer}${showdownSection}`;
 
   const res = await fetch(env.DISCORD_WEBHOOK_URL, {
     method: "POST",
@@ -56,7 +73,7 @@ export async function runLastCallPost(env) {
     return { error: `Discord ${res.status}: ${text}` };
   }
 
-  return { posted: true, mentioned: missing.length, movies: movies.length };
+  return { posted: true, mentioned: mentionIds.length, movies: movies.length };
 }
 
 function noPointsWarning(bettors) {

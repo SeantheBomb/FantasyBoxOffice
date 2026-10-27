@@ -8,6 +8,7 @@ import {
   postAuctionSettled,
   postMovieVoided,
 } from "../_discord.js";
+import { showdownAutocomplete, showdownCommand, showdownComponent } from "./_showdown-commands.js";
 
 const DISCORD_PUBLIC_KEY = "c606c11537ec649f897e142db70be33fe1432084920be1a0f18ba9d694609be7";
 const DEFAULT_AUCTION_DURATION_MS = 24 * 60 * 60 * 1000;
@@ -84,7 +85,7 @@ async function getLeagueUser(db, discordUserId) {
     .first();
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env, waitUntil }) {
   const { valid, body } = await verifySignature(request);
   if (!valid) return new Response("Unauthorized", { status: 401 });
 
@@ -95,9 +96,21 @@ export async function onRequestPost({ request, env }) {
     return respond({ type: 1 });
   }
 
+  // Button clicks — only the showdown lock-in confirmation uses them.
+  if (interaction.type === 3) {
+    if (!interaction.data?.custom_id?.startsWith("sd:")) return respond({ type: 6 });
+    const discordUser = interaction.member?.user ?? interaction.user;
+    const leagueUser = await getLeagueUser(env.DB, discordUser.id);
+    return respond(await showdownComponent(interaction, env, leagueUser, waitUntil));
+  }
+
   // Autocomplete — route by command name.
   if (interaction.type === 4) {
     const cmdName = interaction.data?.name;
+
+    if (cmdName === "showdown") {
+      return respond(await showdownAutocomplete(interaction, env));
+    }
 
     if (cmdName === "bet") {
       const weekend = await getActiveWeekend(env.DB);
@@ -201,6 +214,12 @@ export async function onRequestPost({ request, env }) {
   if (interaction.type === 2) {
     const cmdName = interaction.data?.name;
     const discordUser = interaction.member?.user ?? interaction.user;
+
+    // ── /showdown ─────────────────────────────────────────────────────────────
+    if (cmdName === "showdown") {
+      const leagueUser = await getLeagueUser(env.DB, discordUser.id);
+      return respond(await showdownCommand(interaction, env, leagueUser));
+    }
 
     // ── /bet ─────────────────────────────────────────────────────────────────
     if (cmdName === "bet") {

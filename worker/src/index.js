@@ -4,6 +4,7 @@
 //   * * * * *     — settle expired auctions
 //   30 14 * * MON — self-contained weekly standings post (backfill + score + post)
 //   0 12 * * THU  — last-call betting reminder in #movie-chat (8 AM EDT)
+//   (the every-minute tick also fires the Sat/Sun 22:00 UTC showdown halftime posts)
 //
 // Shares logic with the Pages Functions in ../../functions/api via relative imports.
 
@@ -15,6 +16,8 @@ import { bootstrapSchema } from "../../functions/api/_schema.js";
 import { runStandingsPost } from "./standings-job.js";
 import { runLastCallPost } from "./last-call-job.js";
 import { runSeedPoolChunk } from "./seed-pool-job.js";
+import { runShowdownSettlement, runShowdownHalftime } from "./showdown-job.js";
+import { refundShowdownBetsForMovie } from "../../functions/api/_showdown.js";
 
 const SEASON_FROM = "2026-01-01";
 const SEASON_TO = "2026-12-31";
@@ -28,6 +31,8 @@ export default {
       ctx.waitUntil(runDailiesRefresh(env));
     } else if (cron === "* * * * *") {
       ctx.waitUntil(runSettleExpired(env));
+      const halftime = showdownHalftimeKind(new Date(event.scheduledTime));
+      if (halftime) ctx.waitUntil(runShowdownHalftime(env, halftime));
     } else if (cron === "30 14 * * MON") {
       ctx.waitUntil(runStandingsPost(env));
     } else if (cron === "0 12 * * THU") {
@@ -35,7 +40,7 @@ export default {
     }
   },
 
-  // Manual trigger: GET /trigger?job=movies|dailies|settle|standings|standings-full|lastcall
+  // Manual trigger: GET /trigger?job=movies|dailies|settle|standings|standings-full|lastcall|showdown-settle|showdown-halftime
   // HTTP-triggered ctx.waitUntil has a ~30s wall clock limit, so ?job=standings
   // runs in quick mode (skips BOM scraping). Use standings-full for the complete
   // flow (may time out on HTTP but works via cron's 15-min limit).
@@ -57,6 +62,10 @@ export default {
       ctx.waitUntil(runStandingsPost(env));
     } else if (job === "lastcall") {
       ctx.waitUntil(runLastCallPost(env));
+    } else if (job === "showdown-settle") {
+      ctx.waitUntil(runShowdownSettlement(env, { fromDays: 10, toDays: 1 }));
+    } else if (job === "showdown-halftime") {
+      ctx.waitUntil(runShowdownHalftime(env, url.searchParams.get("kind") === "sunday" ? "sunday" : "halftime"));
     } else if (job === "backfill") {
       ctx.waitUntil(runBackfill(env));
     } else if (job === "seed-pool") {
@@ -68,7 +77,7 @@ export default {
         headers: { "Content-Type": "application/json" },
       });
     } else {
-      return new Response("job must be movies|dailies|settle|standings|standings-full|lastcall", { status: 400 });
+      return new Response("job must be movies|dailies|settle|standings|standings-full|lastcall|showdown-settle|showdown-halftime", { status: 400 });
     }
     return new Response(JSON.stringify({ started: job }), {
       headers: { "Content-Type": "application/json" },
@@ -105,6 +114,7 @@ async function checkWeekendMovieDelays(env) {
 
   const removed = [];
   for (const row of results) {
+    const refunded = await refundShowdownBetsForMovie(env.DB, row.tmdb_id, row.weekend_date);
     await env.DB.batch([
       env.DB.prepare(`DELETE FROM weekend_picks WHERE tmdb_id = ? AND weekend_date = ?`).bind(row.tmdb_id, row.weekend_date),
       env.DB.prepare(`DELETE FROM weekend_movies WHERE tmdb_id = ? AND weekend_date = ?`).bind(row.tmdb_id, row.weekend_date),
@@ -118,7 +128,7 @@ async function checkWeekendMovieDelays(env) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          content: `📅 **${row.title}** has been removed from the **${row.weekend_date}** weekend lineup — its release date moved to **${newDate}**. Any picks for this movie have been cancelled.`,
+          content: `📅 **${row.title}** has been removed from the **${row.weekend_date}** weekend lineup — its release date moved to **${newDate}**. Any picks for this movie have been cancelled.${refunded.length ? ` Showdown stakes on it (${refunded.length}) have been refunded.` : ""}`,
         }),
       }).catch(() => {});
     }
@@ -132,7 +142,19 @@ async function checkWeekendMovieDelays(env) {
 
 async function runDailiesRefresh(env) {
   if (!env.TMDB_TOKEN) return { error: "TMDB_TOKEN missing" };
-  return refreshDailies({ db: env.DB, token: env.TMDB_TOKEN });
+  const dailies = await refreshDailies({ db: env.DB, token: env.TMDB_TOKEN });
+  // Monday's standings job settles last weekend; this retries older showdowns
+  // still waiting on BOM numbers.
+  const showdowns = await runShowdownSettlement(env, { fromDays: 10, toDays: 4 });
+  return { dailies, showdowns };
+}
+
+// Saturday and Sunday at 22:00 UTC, once BOM has posted the previous day.
+function showdownHalftimeKind(t) {
+  if (t.getUTCHours() !== 22 || t.getUTCMinutes() !== 0) return null;
+  if (t.getUTCDay() === 6) return "halftime";
+  if (t.getUTCDay() === 0) return "sunday";
+  return null;
 }
 
 async function runSettleExpired(env) {

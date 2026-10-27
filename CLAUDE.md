@@ -26,6 +26,8 @@ Both runtimes bind the same D1 database as `env.DB`. Database name: `cf_auth_dem
 0 12 * * THU  → last-call betting reminder in #movie-chat
 ```
 
+The every-minute tick also fires the showdown halftime posts at 22:00 UTC Sat/Sun (`showdownHalftimeKind()` in `worker/src/index.js`). This worker already uses 5 cron triggers (the Workers Free cap), so new schedules piggyback on the minute tick. The 14:00 dailies cron also retries showdowns still waiting on BOM numbers.
+
 **CRITICAL — Cloudflare cron DOW numbering:** Cloudflare uses Quartz-style `1=Sunday`, NOT POSIX `1=Monday`. Always use named days (`MON`, `TUE`...) for day-of-week, otherwise the post fires a day early. See commit `0ba7ac7`.
 
 ## The Monday standings post (the most-touched feature)
@@ -35,6 +37,7 @@ Both runtimes bind the same D1 database as `env.DB`. Database name: `cf_auth_dem
 1. **Backfill** — `backfillDailies()` pulls full weekly cumulative history from BOM release pages. Always runs; never skipped.
 2. **Daily refresh** — `refreshDailies()` gets today's cumulative BOM snapshot inline, eliminating the race with the 14:00 daily cron.
 3. **Score predictions** — `autoScoreWeekendPicks()` finds unscored movies from the past 3 days, gets their BOM opening weekend gross, and calls `scoreMovie()`. Points are written to DB first; Discord post is a separate step so a webhook failure doesn't mask a successful score.
+   - **3b. Settle showdown** — `runShowdownSettlement()` settles last weekend's showdown and posts the spoiler-tagged results. If BOM is missing a movie it posts a one-time "on hold" note and the daily cron retries.
 4. **Refresh budgets** — `refreshNewReleaseBudgets()` updates TMDB budgets for movies that opened in the past week.
 5. **Standings + chart** — `computeStandings()` and `computeHistory()` run in parallel, then `buildChartConfig()` renders via QuickChart.io. **Gotcha:** `buildChartConfig()` returns a **JS template literal STRING**, not a parsed JSON object. QuickChart only evals callback functions when the chart param is a string.
 6. **Post to Discord** — multipart POST with the PNG attached + overflow text messages.
@@ -68,6 +71,20 @@ Key tables:
 - `weekend_movies` — tmdb_id, weekend_date (composite PK). Admin must populate before Monday for the announcement.
 - `weekend_picks` — discord_user_id, tmdb_id, estimate (integer millions), weekend_date, points_awarded
 - `weekend_results` — tmdb_id, weekend_date, actual_gross, scored_at
+- `showdown_bets` — id, user_id, weekend_date, tmdb_id, stake, outcome (`won` | `lost` | `push` | `refunded`), payout, settled_at. UNIQUE(user_id, weekend_date).
+- `showdown_results` — weekend_date (PK), status (`settled` | `push`), winner_tmdb_id, grosses (JSON, whole dollars)
+- `showdown_posts` — (weekend_date, kind) claim rows so scheduled showdown posts can't double-fire
+
+## Weekend showdown (double or nothing)
+
+Any weekend with 2+ `weekend_movies` rows is automatically a showdown. Each player picks the movie they think grosses the most and stakes 1..all of their **available** points: `points_remaining` minus their leading bids in open auctions, since auctions don't escrow. Bets are final.
+
+- **Escrow:** the stake is deducted when the bet is placed. A win credits 2× the stake (net +stake); a loss credits nothing. An exact tie for first, or a bet on a movie that left the lineup, refunds the stake. Delayed-movie removal in the worker refunds immediately.
+- **Logic:** all in `functions/api/_showdown.js`. `placeShowdownBet()` re-checks the balance inside the batch so there's no double-spend. `settleShowdown()` guards on the `showdown_results` PK insert, so it settles exactly once. Winner = latest `dailies` row in the weekend window, compared to the dollar (not the $1M rounding `/bet` uses).
+- **Discord:** `/showdown pick movie points` (points accepts `all`) shows an ephemeral confirm with Lock-in / Cancel buttons (component interactions, custom_id `sd:lock:<weekend>:<tmdb>:<stake>`). `/showdown board` shows the tale of the tape. Lock-ins post to #game-feed. Monday announcement, Thursday last call and the halftime posts include the showdown.
+- **Web:** `src/pages/Showdown.jsx` renders on `/betting`. APIs: `/api/showdown` (POST), `/api/showdown/current`, `/api/showdown/history`. Admin: `/api/admin/showdown` (GET), `/settle`, `/refund`, shown in the Weekend Predictions panel.
+- **Test:** `node --loader ./worker/test/loader.mjs ./worker/test/run-showdown-local.mjs`. Set `SHOW=1` to print the results post.
+- **Commands:** after changing `scripts/register-discord-commands.js`, re-run it with `DISCORD_BOT_TOKEN` from `.env.local`.
 
 ## Points system
 
@@ -75,7 +92,7 @@ Key tables:
 1. **Auction currency** — decremented when a player wins a movie auction.
 2. **Prediction earnings** — incremented when `scoreMovie()` awards points for weekend pick accuracy.
 
-There is no separate "prediction points" balance. Winning predictions directly funds auction bids.
+There is no separate "prediction points" balance. Winning predictions directly funds auction bids. Showdown stakes are escrowed out of the same pool (see above).
 
 Payout scales with the number of bettors on a movie: 1st place earns `min(bettors − 1, 3)`, each lower place one less, floored at 0 (1 bettor → 0; 2 → 1/0; 3 → 2/1/0; 4+ → 3/2/1/0…). The Thursday last-call post flags movies with 0–1 bets as earning no points.
 

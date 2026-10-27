@@ -29,5 +29,38 @@ export async function bootstrapSchema(db) {
        updated_at TEXT DEFAULT (datetime('now'))
      )`
   ).run();
+  await db.batch([
+    db.prepare(
+      `CREATE TABLE IF NOT EXISTS showdown_bets (
+         id TEXT PRIMARY KEY,
+         user_id TEXT NOT NULL,
+         weekend_date TEXT NOT NULL,
+         tmdb_id INTEGER NOT NULL,
+         stake INTEGER NOT NULL,
+         outcome TEXT,
+         payout INTEGER,
+         settled_at TEXT,
+         created_at TEXT DEFAULT (datetime('now')),
+         UNIQUE(user_id, weekend_date)
+       )`
+    ),
+    db.prepare(
+      `CREATE TABLE IF NOT EXISTS showdown_results (
+         weekend_date TEXT PRIMARY KEY,
+         status TEXT NOT NULL,
+         winner_tmdb_id INTEGER,
+         grosses TEXT NOT NULL,
+         settled_at TEXT DEFAULT (datetime('now'))
+       )`
+    ),
+    db.prepare(
+      `CREATE TABLE IF NOT EXISTS showdown_posts (
+         weekend_date TEXT NOT NULL,
+         kind TEXT NOT NULL,
+         posted_at TEXT DEFAULT (datetime('now')),
+         PRIMARY KEY (weekend_date, kind)
+       )`
+    ),
+  ]);
   bootstrapped = true;
 }

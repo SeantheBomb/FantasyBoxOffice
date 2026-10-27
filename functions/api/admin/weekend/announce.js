@@ -1,5 +1,6 @@
 import { json, requireAdmin } from "../../_auth.js";
 import { postWeekendAnnouncement } from "../../_discord.js";
+import { getShowdownMovies } from "../../_showdown.js";
 
 export async function onRequestPost({ request, env }) {
   const { user, response } = await requireAdmin(request, env);
@@ -23,9 +24,11 @@ export async function onRequestPost({ request, env }) {
     return json({ error: "No upcoming weekend movies configured" }, { status: 400 });
   }
 
+  const weekendDate = weekendMovies[0].weekend_date;
   await postWeekendAnnouncement(env.DISCORD_WEBHOOK_URL, {
-    weekendDate: weekendMovies[0].weekend_date,
+    weekendDate,
     movies: weekendMovies,
+    showdown: (await getShowdownMovies(env.DB, weekendDate)).length >= 2,
   });
 
   return json({ ok: true, movies: weekendMovies.map((m) => m.title) });

@@ -183,12 +183,15 @@ export async function postToWebhook(webhookUrl, { messages, pngBytes, filename =
 
 // Post the upcoming weekend's movie lineup to a Discord channel as embeds —
 // one embed per movie with poster, title, and owner. Includes /bet instructions.
-export async function postWeekendAnnouncement(webhookUrl, { weekendDate, movies }) {
+export async function postWeekendAnnouncement(webhookUrl, { weekendDate, movies, showdown = false }) {
   if (!webhookUrl) throw new Error("webhook URL not set");
 
   const [, m, d] = weekendDate.split("-");
   const dateStr = `${MONTH_ABBR[Number(m) - 1]} ${Number(d)}`;
-  const content = `@everyone\n## 🎬 Opening Weekend — ${dateStr}\nHow much will each of these movies earn on their opening weekend? Use \`/bet\` to submit your prediction for each one!`;
+  const showdownStr = showdown
+    ? `\n\n### ⚔️ SHOWDOWN\nWhich movie wins the weekend? Back your pick with \`/showdown pick\` — stake as many points as you dare. **Double or nothing.**`
+    : "";
+  const content = `@everyone\n## 🎬 Opening Weekend — ${dateStr}\nHow much will each of these movies earn on their opening weekend? Use \`/bet\` to submit your prediction for each one!${showdownStr}`;
 
   const embeds = movies.map((movie) => ({
     title: movie.title,

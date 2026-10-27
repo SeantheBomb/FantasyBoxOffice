@@ -154,6 +154,18 @@ export const apiBettingHistory = () => jsonFetch("/api/betting/history");
 export const apiBet = (tmdbId, estimate) =>
   jsonFetch("/api/betting", { method: "POST", body: { tmdb_id: tmdbId, estimate } });
 
+// Weekend showdown (double or nothing)
+export const apiShowdownCurrent = () => jsonFetch("/api/showdown/current");
+export const apiShowdownHistory = () => jsonFetch("/api/showdown/history");
+export const apiShowdownBet = (tmdbId, stake) =>
+  jsonFetch("/api/showdown", { method: "POST", body: { tmdb_id: tmdbId, stake } });
+export const apiAdminShowdown = (weekendDate) =>
+  jsonFetch("/api/admin/showdown?weekend_date=" + encodeURIComponent(weekendDate));
+export const apiAdminSettleShowdown = (weekendDate, grosses, notify) =>
+  jsonFetch("/api/admin/showdown/settle", { method: "POST", body: { weekend_date: weekendDate, grosses, notify } });
+export const apiAdminRefundShowdownBet = (betId) =>
+  jsonFetch("/api/admin/showdown/refund", { method: "POST", body: { bet_id: betId } });
+
 // Self-service
 export const apiUpdateMyProfile = (username) =>
   jsonFetch("/api/me/profile", { method: "POST", body: { username } });

@@ -15,6 +15,7 @@ import {
   apiAdminSuggestLineup, apiAdminSetWeekendMovies, apiAdminPostWeekendAnnouncement, apiAdminPostLastCall,
   apiAdminUpdatePick, apiAdminDeletePick, apiAdminCreatePick, apiAdminSetBettingWindow,
   apiBettingHistory,
+  apiAdminShowdown, apiAdminSettleShowdown, apiAdminRefundShowdownBet,
 } from "../api";
 import { useUser } from "../useUser";
 
@@ -1337,6 +1338,8 @@ function WeekendPanel() {
         )}
       </div>
 
+      {data?.weekend_date && <ShowdownAdmin key={data.weekend_date} weekendDate={data.weekend_date} />}
+
       {/* Picks & scoring per movie */}
       {!data ? (
         <div>Loading...</div>
@@ -1531,6 +1534,119 @@ function WeekendPanel() {
         );
       })}
     </section>
+  );
+}
+
+// ── Showdown (double or nothing) ─────────────────────────────────────────────
+
+function ShowdownAdmin({ weekendDate }) {
+  const [data, setData] = useState(null);
+  const [version, setVersion] = useState(0);
+  const [grossInputs, setGrossInputs] = useState({}); // tmdb_id → dollars (string)
+  const [notify, setNotify] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiAdminShowdown(weekendDate).then((r) => { if (!cancelled && r.ok) setData(r.data); });
+    return () => { cancelled = true; };
+  }, [weekendDate, version]);
+
+  if (!data || data.movies.length < 2) return null;
+
+  const titleOf = Object.fromEntries(data.movies.map((m) => [m.tmdb_id, m.title]));
+  const grossFor = (m) => grossInputs[m.tmdb_id] ?? (data.result?.grosses[m.tmdb_id] ?? data.bom_grosses[m.tmdb_id] ?? "");
+
+  async function settle(useInputs) {
+    const label = useInputs ? "with the grosses entered below" : "from BOM dailies";
+    if (!window.confirm(`Settle the ${weekendDate} showdown ${label}? Payouts are final.`)) return;
+    setBusy(true);
+    setMsg(null);
+    const grosses = useInputs ? Object.fromEntries(data.movies.map((m) => [m.tmdb_id, Number(String(grossFor(m)).replace(/[$,\s]/g, ""))])) : undefined;
+    const r = await apiAdminSettleShowdown(weekendDate, grosses, notify);
+    setBusy(false);
+    setMsg(r.ok ? { ok: true, text: `Settled (${r.data.status})${r.data.posted ? " & posted" : ""}` } : { error: r.data?.error || "Failed" });
+    if (r.ok) setVersion((v) => v + 1);
+  }
+
+  async function refund(bet) {
+    if (!window.confirm(`Refund ${bet.username}'s ${bet.stake} pts on ${titleOf[bet.tmdb_id]}?`)) return;
+    const r = await apiAdminRefundShowdownBet(bet.id);
+    if (r.ok) setVersion((v) => v + 1);
+    else alert(r.data?.error || "Failed to refund");
+  }
+
+  return (
+    <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #eee" }}>
+      <h4 style={{ marginTop: 0, marginBottom: 8 }}>
+        ⚔️ Showdown{" "}
+        {data.result && (
+          <span style={{ fontSize: 12, color: "var(--fbo-success)", fontWeight: 400 }}>
+            ✓ {data.result.status === "push" ? "Push — all refunded" : `Settled — ${titleOf[data.result.winner_tmdb_id]} won`}
+          </span>
+        )}
+      </h4>
+      <div className="fbo-scroll-x" style={{ marginBottom: 8 }}>
+        <table style={{ ...tbl, fontSize: 13 }}>
+          <thead>
+            <tr style={thRow}>
+              <th style={th}>Player</th>
+              <th style={th}>Pick</th>
+              <th style={thRight}>Stake</th>
+              <th style={th}>Outcome</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.bets.map((b) => (
+              <tr key={b.id} style={{ borderTop: "1px solid #f0f0f0" }}>
+                <td style={td}>{b.username}</td>
+                <td style={td}>{titleOf[b.tmdb_id] ?? `#${b.tmdb_id}`}</td>
+                <td style={tdRight}>{b.stake}</td>
+                <td style={td}>{b.outcome ? `${b.outcome}${b.payout ? ` (+${b.payout})` : ""}` : "open"}</td>
+                <td style={td}>
+                  {!b.outcome && <button style={{ fontSize: 11 }} onClick={() => refund(b)}>Refund</button>}
+                </td>
+              </tr>
+            ))}
+            {data.bets.length === 0 && (
+              <tr><td colSpan={5} style={{ ...td, color: "var(--fbo-text-muted)" }}>No showdown bets yet.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {!data.result && (
+        <>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 13, marginBottom: 8 }}>
+            {data.movies.map((m) => (
+              <label key={m.tmdb_id}>
+                {m.title}{" "}
+                <input
+                  value={grossFor(m)}
+                  placeholder="gross $"
+                  onChange={(e) => setGrossInputs((g) => ({ ...g, [m.tmdb_id]: e.target.value }))}
+                  style={{ width: 110, textAlign: "right" }}
+                />
+              </label>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 13 }}>
+            <button disabled={busy} onClick={() => settle(false)} title="Same lookup the Monday job uses">Settle from BOM</button>
+            <button disabled={busy} onClick={() => settle(true)}>Settle with entered grosses</button>
+            <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
+              Post results to #movie-chat
+            </label>
+            {msg?.ok && <span style={{ color: "var(--fbo-success)" }}>{msg.text}</span>}
+            {msg?.error && <span style={{ color: "var(--fbo-danger)" }}>{msg.error}</span>}
+          </div>
+          <div style={{ fontSize: 12, color: "var(--fbo-text-muted)", marginTop: 6 }}>
+            Settles automatically in the Monday standings job (retried daily if BOM is late). Grosses are whole dollars; an exact tie refunds everyone.
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 

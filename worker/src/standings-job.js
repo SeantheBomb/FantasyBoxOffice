@@ -14,6 +14,8 @@ import {
   postWeekendAnnouncement,
 } from "../../functions/api/_discord.js";
 import { scoreMovie } from "../../functions/api/_weekend-scoring.js";
+import { getShowdownMovies } from "../../functions/api/_showdown.js";
+import { runShowdownSettlement } from "./showdown-job.js";
 
 // { quick: true } skips the slow BOM scraping steps (backfill + dailies
 // refresh). Use for manual HTTP triggers where ctx.waitUntil has a 30-second
@@ -77,6 +79,16 @@ export async function runStandingsPost(env, { quick = false } = {}) {
   const scoringMs = Date.now() - st;
   console.log("[standings] scoring done:", JSON.stringify(scoringResult));
 
+  // ── Step 3b: Settle last weekend's showdown ──────────────────────────
+  // Before standings so the posted balances include showdown payouts.
+  let showdownResult;
+  try {
+    showdownResult = await runShowdownSettlement(env, { fromDays: 3, toDays: 1 });
+  } catch (e) {
+    showdownResult = { error: e.message || String(e) };
+  }
+  console.log("[standings] showdown done:", JSON.stringify(showdownResult));
+
   // ── Step 4: Refresh budgets for new releases ─────────────────────────
   let budgetResult = null;
   if (env.TMDB_TOKEN) {
@@ -138,9 +150,11 @@ export async function runStandingsPost(env, { quick = false } = {}) {
        ORDER BY m.title`
     ).all();
     if (weekendMovies.length) {
+      const weekendDate = weekendMovies[0].weekend_date;
       await postWeekendAnnouncement(env.DISCORD_WEBHOOK_URL, {
-        weekendDate: weekendMovies[0].weekend_date,
+        weekendDate,
         movies: weekendMovies,
+        showdown: (await getShowdownMovies(env.DB, weekendDate)).length >= 2,
       });
       announcementResult = { posted: true, movies: weekendMovies.length };
       console.log(`[standings] announcement posted (${weekendMovies.length} movies, ${weekendMovies[0].weekend_date})`);
@@ -166,6 +180,7 @@ export async function runStandingsPost(env, { quick = false } = {}) {
     chart_error: chartError,
     announcement: announcementResult,
     scoring: scoringResult,
+    showdown: showdownResult,
   };
   console.log("[standings] DONE", JSON.stringify(summary));
 
@@ -181,6 +196,7 @@ export async function runStandingsPost(env, { quick = false } = {}) {
     budgets: budgetResult,
     announcement: announcementResult,
     scoring: scoringResult,
+    showdown: showdownResult,
   };
 }
 

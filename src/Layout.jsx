@@ -44,7 +44,9 @@ export default function Layout({ children }) {
             <>
               <span className="fbo-userbadge">
                 <b>{user.username}</b>
-                <span className="fbo-ticket">🎟 {user.points_remaining} pts</span>
+                <span className="fbo-ticket">
+                  🎟 {user.points_remaining} pts{user.points_in_play > 0 && ` · ${user.points_in_play} in play`}
+                </span>
               </span>
               <NavLink to="/me" style={linkStyle}>Account</NavLink>
             </>

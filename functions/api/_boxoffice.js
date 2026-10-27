@@ -208,9 +208,10 @@ export async function refreshDailies({ db, token }) {
   const today = new Date().toISOString().slice(0, 10);
   const now = new Date().toISOString();
 
-  // Only scrape dailies for movies we actually track (owned or currently
-  // auctioned) — BOM is a slow, fragile dependency and there's no point
-  // pulling revenue for the other ~250 titles in the catalog.
+  // Only scrape dailies for movies we actually track (owned, currently
+  // auctioned, or in a recent weekend lineup so showdowns can settle) — BOM is
+  // a slow, fragile dependency and there's no point pulling revenue for the
+  // other ~250 titles in the catalog.
   const { results } = await db
     .prepare(
       `SELECT m.tmdb_id, m.title, m.bom_slug
@@ -219,6 +220,7 @@ export async function refreshDailies({ db, token }) {
            AND (
              EXISTS (SELECT 1 FROM owned_movies o WHERE o.tmdb_id = m.tmdb_id)
              OR EXISTS (SELECT 1 FROM auctions a WHERE a.tmdb_id = m.tmdb_id AND a.status = 'open')
+             OR EXISTS (SELECT 1 FROM weekend_movies wm WHERE wm.tmdb_id = m.tmdb_id AND wm.weekend_date >= date('now', '-10 days'))
            )
            AND NOT EXISTS (
              SELECT 1 FROM dailies d

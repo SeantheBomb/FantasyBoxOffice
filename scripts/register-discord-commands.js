@@ -35,6 +35,37 @@ const commands = [
     ],
   },
   {
+    name: "showdown",
+    description: "Weekend showdown — back the movie that wins the weekend. Double or nothing.",
+    options: [
+      {
+        name: "pick",
+        description: "Stake points on the movie you think tops the weekend box office",
+        type: 1, // SUB_COMMAND
+        options: [
+          {
+            name: "movie",
+            description: "Movie you think wins the weekend",
+            type: 3, // STRING
+            required: true,
+            autocomplete: true,
+          },
+          {
+            name: "points",
+            description: "Points to stake (whole number), or 'all' to go all in",
+            type: 3, // STRING — allows "all"
+            required: true,
+          },
+        ],
+      },
+      {
+        name: "board",
+        description: "Tale of the tape — who's backing what, and your bet",
+        type: 1, // SUB_COMMAND
+      },
+    ],
+  },
+  {
     name: "auction",
     description: "Start an auction for an unclaimed, unreleased movie",
     options: [

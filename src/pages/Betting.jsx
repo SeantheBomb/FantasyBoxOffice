@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useUser } from "../useUser";
-import { apiBettingCurrent, apiBettingHistory, apiBet } from "../api";
+import { apiBettingCurrent, apiBettingHistory, apiBet, apiShowdownCurrent, apiShowdownHistory } from "../api";
+import Showdown from "./Showdown";
 
 const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -220,18 +221,26 @@ function WeekendSection({ weekend, label, isInLeague, hasAuth, onBetPlaced }) {
 }
 
 export default function Betting() {
-  const { user } = useUser();
+  const { user, refresh: refreshUser } = useUser();
   const [current, setCurrent] = useState(null);
   const [history, setHistory] = useState([]);
+  const [showdown, setShowdown] = useState(null);
+  const [showdownMe, setShowdownMe] = useState(null);
+  const [pastShowdowns, setPastShowdowns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([apiBettingCurrent(), apiBettingHistory()]).then(([curRes, histRes]) => {
+    Promise.all([apiBettingCurrent(), apiBettingHistory(), apiShowdownCurrent(), apiShowdownHistory()]).then(([curRes, histRes, sdRes, sdHistRes]) => {
       if (cancelled) return;
       if (curRes.ok) setCurrent(curRes.data?.weekend ?? null);
       if (histRes.ok) setHistory(histRes.data?.weekends ?? []);
+      if (sdRes.ok) {
+        setShowdown(sdRes.data?.showdown ?? null);
+        setShowdownMe(sdRes.data?.me ?? null);
+      }
+      if (sdHistRes.ok) setPastShowdowns(sdHistRes.data?.showdowns ?? []);
       setLoading(false);
     });
     return () => { cancelled = true; };
@@ -250,6 +259,15 @@ export default function Betting() {
         Predict each movie&apos;s opening weekend gross. Points earned here go directly into your auction budget.
       </p>
 
+      {showdown && (
+        <Showdown
+          showdown={showdown}
+          me={showdownMe}
+          hasAuth={!!user}
+          onBetPlaced={() => { reload(); refreshUser(); }}
+        />
+      )}
+
       {current ? (
         <WeekendSection
           weekend={current}
@@ -260,6 +278,16 @@ export default function Betting() {
         />
       ) : (
         <p style={{ color: "#888", marginBottom: 32 }}>No active weekend lineup yet — check back soon.</p>
+      )}
+
+      {pastShowdowns.length > 0 && (
+        <>
+          <hr style={{ border: "none", borderTop: "1px solid #3a1a1a", margin: "0 0 32px" }} />
+          <h2 style={{ margin: "0 0 20px", fontSize: 18, color: "#f5e8c0" }}>Past Showdowns</h2>
+          {pastShowdowns.map((s) => (
+            <Showdown key={s.weekend_date} showdown={s} me={null} hasAuth={false} compact onBetPlaced={() => {}} />
+          ))}
+        </>
       )}
 
       {history.length > 0 && (
