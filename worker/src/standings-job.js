@@ -14,7 +14,8 @@ import {
   postWeekendAnnouncement,
 } from "../../functions/api/_discord.js";
 import { scoreMovie } from "../../functions/api/_weekend-scoring.js";
-import { getShowdownMovies } from "../../functions/api/_showdown.js";
+import { getShowdownMovies, postShowdownContent } from "../../functions/api/_showdown.js";
+import { nextFriday, autoFillLineup, missingLineupWarning } from "../../functions/api/_lineup.js";
 import { runShowdownSettlement } from "./showdown-job.js";
 
 // { quick: true } skips the slow BOM scraping steps (backfill + dailies
@@ -138,6 +139,18 @@ export async function runStandingsPost(env, { quick = false } = {}) {
   }
 
   // ── Step 6: Post next-weekend announcement ───────────────────────────
+  // An empty lineup is filled from owned movies opening that week so a
+  // forgotten weekend still gets announced and bet on.
+  let lineupResult = null;
+  const upcomingWeekend = nextFriday();
+  try {
+    const fill = await autoFillLineup(env.DB, upcomingWeekend);
+    lineupResult = { weekend_date: upcomingWeekend, auto_filled: fill.filled, movies: fill.movies.map((m) => m.title) };
+  } catch (e) {
+    lineupResult = { error: e.message || String(e) };
+  }
+  console.log("[standings] lineup:", JSON.stringify(lineupResult));
+
   let announcementResult = null;
   try {
     const { results: weekendMovies } = await env.DB.prepare(
@@ -167,6 +180,16 @@ export async function runStandingsPost(env, { quick = false } = {}) {
     console.error("[standings] announcement error:", announcementResult.error);
   }
 
+  try {
+    const warning = await missingLineupWarning(env.DB, upcomingWeekend);
+    if (warning) {
+      await postShowdownContent(env.DISCORD_WEBHOOK_URL, warning);
+      lineupResult = { ...lineupResult, warned: true };
+    }
+  } catch (e) {
+    console.error("[standings] lineup warning error:", e.message || String(e));
+  }
+
   // ── Summary ──────────────────────────────────────────────────────────
   const totalMs = Date.now() - t0;
   const summary = {
@@ -178,6 +201,7 @@ export async function runStandingsPost(env, { quick = false } = {}) {
     standings_ms: standingsMs,
     standings_error: standingsError,
     chart_error: chartError,
+    lineup: lineupResult,
     announcement: announcementResult,
     scoring: scoringResult,
     showdown: showdownResult,
@@ -194,6 +218,7 @@ export async function runStandingsPost(env, { quick = false } = {}) {
     backfill: backfillResult,
     dailies: dailiesResult,
     budgets: budgetResult,
+    lineup: lineupResult,
     announcement: announcementResult,
     scoring: scoringResult,
     showdown: showdownResult,

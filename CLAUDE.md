@@ -68,12 +68,22 @@ Key tables:
 - `auctions` — id, tmdb_id, status (`open` | `sold` | `cancelled`), current_bid, current_bidder_id, ends_at, settled_at
 - `auction_passes` — auction_id, user_id (composite key)
 - `dailies` — tmdb_id, date, domestic_revenue, source (`bom` | `bom-weekly` | `manual`), scraped_at
-- `weekend_movies` — tmdb_id, weekend_date (composite PK). Admin must populate before Monday for the announcement.
+- `weekend_movies` — tmdb_id, weekend_date (composite PK). If the admin hasn't set next weekend's lineup, the Monday job auto-fills it (see "Weekend lineup safeguards").
 - `weekend_picks` — discord_user_id, tmdb_id, estimate (integer millions), weekend_date, points_awarded
 - `weekend_results` — tmdb_id, weekend_date, actual_gross, scored_at
 - `showdown_bets` — id, user_id, weekend_date, tmdb_id, stake, outcome (`won` | `lost` | `push` | `refunded`), payout, settled_at. UNIQUE(user_id, weekend_date).
 - `showdown_results` — weekend_date (PK), status (`settled` | `push`), winner_tmdb_id, grosses (JSON, whole dollars)
 - `showdown_posts` — (weekend_date, kind) claim rows so scheduled showdown posts can't double-fire
+
+## Weekend lineup safeguards
+
+Added after Godzilla Minus Zero (limited IMAX Tue Nov 3, wide Fri Nov 6) was left out of the Nov 6 lineup. Helpers live in `functions/api/_lineup.js`.
+
+- **Release window:** a release belongs to the Friday weekend it falls around, from Monday to Sunday (`weekend_date − 4` to `+ 2`). Suggest lineup, auto-fill and the warnings all use this window.
+- **Wide dates:** `pinWideReleaseDates()` runs after every `refreshMovies()`. For owned movies releasing −7 to +45 days from today, it sets `release_date` to the earliest US wide (type 3) date. TMDB's primary date is the earliest date in any release type, including limited and IMAX runs.
+- **Auto-fill:** the Monday job fills next weekend's lineup from owned openers only when no lineup exists. A lineup an admin saved is never changed.
+- **Warnings:** if an owned opener is missing from the lineup, `missingLineupWarning()` pings admins in #movie-chat from the Monday job and the Thursday last call. The admin panel shows a banner with an "Add" button.
+- **Test:** `node --loader ./worker/test/loader.mjs ./worker/test/run-lineup-local.mjs`.
 
 ## Weekend showdown (double or nothing)
 

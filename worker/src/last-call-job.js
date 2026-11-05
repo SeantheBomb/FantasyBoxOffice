@@ -1,5 +1,6 @@
 import { getOpenWeekends } from "../../functions/api/_betting.js";
 import { getShowdownBoard, taleOfTheTape } from "../../functions/api/_showdown.js";
+import { missingLineupWarning } from "../../functions/api/_lineup.js";
 
 export async function runLastCallPost(env) {
   if (!env.DISCORD_WEBHOOK_URL) return { error: "DISCORD_WEBHOOK_URL missing" };
@@ -50,7 +51,18 @@ export async function runLastCallPost(env) {
     showdownSection = `\n\n### ⚔️ Showdown — double or nothing\n${taleOfTheTape(board.movies)}\n${sittingOut}\nPick the weekend winner with \`/showdown pick\`.`;
   }
 
-  if (!missing.length && !showdownMissing.length) return { skipped: "all players have placed their bets" };
+  const lineupWarning = await missingLineupWarning(env.DB, weekendDate);
+
+  if (!missing.length && !showdownMissing.length) {
+    if (lineupWarning) {
+      await fetch(env.DISCORD_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: lineupWarning }),
+      }).catch(() => {});
+    }
+    return { skipped: "all players have placed their bets", lineup_warning: !!lineupWarning };
+  }
 
   const mentionIds = [...new Set([...missing, ...showdownMissing].map((u) => u.discord_user_id))];
   const mentions = mentionIds.map((id) => `<@${id}>`).join(" ");
@@ -60,7 +72,7 @@ export async function runLastCallPost(env) {
     ? "\n\n⚠️ A movie with fewer than 2 bets awards **no points** — winning a bet needs someone to beat."
     : "";
   const closesUnix = Math.floor(Date.parse(weekend.closes_at) / 1000);
-  const content = `${mentions}\n📣 **Last call!** Betting closes <t:${closesUnix}:F> (<t:${closesUnix}:R>). Use \`/bet\` to lock in your picks!\n\n${list}${footer}${showdownSection}`;
+  const content = `${mentions}\n📣 **Last call!** Betting closes <t:${closesUnix}:F> (<t:${closesUnix}:R>). Use \`/bet\` to lock in your picks!\n\n${list}${footer}${showdownSection}${lineupWarning ? `\n\n${lineupWarning}` : ""}`;
 
   const res = await fetch(env.DISCORD_WEBHOOK_URL, {
     method: "POST",

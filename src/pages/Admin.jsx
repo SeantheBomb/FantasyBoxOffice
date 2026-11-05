@@ -987,6 +987,12 @@ function nextFriday() {
   return d.toISOString().slice(0, 10);
 }
 
+function shiftDate(isoDate, days) {
+  const d = new Date(isoDate + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 // ISO timestamp → value for <input type="datetime-local"> in the browser's zone.
 function toLocalInput(iso) {
   const d = new Date(iso);
@@ -1062,6 +1068,18 @@ function WeekendPanel() {
     if (!q) return filtered.slice(0, 40);
     return filtered.filter((m) => m.title.toLowerCase().includes(q)).slice(0, 40);
   }, [catalog, movieQuery, lineupIds]);
+
+  // Owned movies opening Mon–Sun around the lineup's Friday (same window as
+  // Suggest lineup) that aren't in it yet.
+  const missingOwned = useMemo(() => {
+    if (!catalog || !configDate) return [];
+    const from = shiftDate(configDate, -4);
+    const to = shiftDate(configDate, 2);
+    const inLineup = new Set(lineupIds);
+    return catalog.filter((m) =>
+      !m.is_void && m.status !== "complete" && m.release_date >= from && m.release_date <= to && !inLineup.has(m.tmdb_id)
+    );
+  }, [catalog, configDate, lineupIds]);
 
   const lineupMovies = useMemo(() => {
     if (!catalog) return lineupIds.map((id) => ({ tmdb_id: id, title: String(id) }));
@@ -1224,6 +1242,21 @@ function WeekendPanel() {
             {suggestingLineup ? "Finding..." : "Suggest lineup"}
           </button>
         </div>
+        {missingOwned.length > 0 && (
+          <div style={{ background: "#fff4e5", border: "1px solid #f59e0b", borderRadius: 6, padding: "8px 10px", fontSize: 13, marginBottom: 8, color: "#7a4a00" }}>
+            ⚠️ Owned movies opening this weekend but not in the lineup:{" "}
+            {missingOwned.map((m, i) => (
+              <span key={m.tmdb_id}>{i > 0 && ", "}<b>{m.title}</b> ({m.owner_username}, opens {m.release_date})</span>
+            ))}
+            <button
+              style={{ marginLeft: 8, fontSize: 12 }}
+              onClick={() => setLineupIds((ids) => [...ids, ...missingOwned.map((m) => m.tmdb_id)])}
+            >
+              Add {missingOwned.length > 1 ? "all" : "it"}
+            </button>
+            <span style={{ marginLeft: 6 }}>— then Save lineup.</span>
+          </div>
+        )}
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 300px" }}>
             <input

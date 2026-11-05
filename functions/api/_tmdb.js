@@ -167,7 +167,40 @@ export async function refreshMovies({ db, token, from, to, minPopularity = 0 }) 
     overview: m.overview || "",
   }));
   await upsertMovies(db, rows);
-  return { upserted: rows.length, discovered: releases.length };
+  const pinned = await pinWideReleaseDates({ db, token });
+  return { upserted: rows.length, discovered: releases.length, pinned };
+}
+
+// The upsert above stores TMDB's primary date — the earliest US release,
+// which for event films is often a limited/IMAX run days before the wide
+// opening (Godzilla Minus Zero: IMAX Tue Nov 3, wide Fri Nov 6). Lineups and
+// statuses key off the wide date, so owned movies near release are re-pinned
+// to their earliest US wide (type 3) date after every refresh. Capped to stay
+// under the subrequest limit.
+export async function pinWideReleaseDates({ db, token }) {
+  const { results } = await db
+    .prepare(
+      `SELECT m.tmdb_id, m.release_date FROM movies m
+         WHERE EXISTS (SELECT 1 FROM owned_movies o WHERE o.tmdb_id = m.tmdb_id AND o.is_void = 0)
+           AND m.release_date BETWEEN date('now', '-7 days') AND date('now', '+45 days')
+         LIMIT 15`
+    )
+    .all();
+
+  const changed = [];
+  for (const row of results || []) {
+    let wide = null;
+    try {
+      wide = getUsTheatricalDate(await tmdbFetch(`/movie/${row.tmdb_id}/release_dates`, token));
+    } catch {
+      continue;
+    }
+    if (wide && wide !== row.release_date) {
+      await db.prepare(`UPDATE movies SET release_date = ? WHERE tmdb_id = ?`).bind(wide, row.tmdb_id).run();
+      changed.push({ tmdb_id: row.tmdb_id, from: row.release_date, to: wide });
+    }
+  }
+  return { checked: results?.length || 0, changed };
 }
 
 // Fetch TMDB detail (for budget) for up to `limit` movies that are either
